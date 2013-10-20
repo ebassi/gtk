@@ -1860,6 +1860,7 @@ gdk/win32/rc/gdk.rc
 gdk/quartz/Makefile
 gdk/wayland/Makefile
 gdk/gdkversionmacros.h
+clutter/Makefile
 gtk/Makefile
 gtk/makefile.msc
 gtk/gtkversion.h
