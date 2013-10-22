@@ -1834,6 +1834,7 @@ testsuite/a11y/Makefile
 testsuite/css/Makefile
 testsuite/css/parser/Makefile
 testsuite/gdk/Makefile
+testsuite/clutter/Makefile
 testsuite/gtk/Makefile
 testsuite/reftests/Makefile
 docs/Makefile

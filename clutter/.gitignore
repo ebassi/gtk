@@ -1,0 +1,5 @@
+/stamp-*.h
+/clutterenumtypes.[ch]
+/cluttermarshalers.[ch]
+/libclutter-3.la
+/*.lo
