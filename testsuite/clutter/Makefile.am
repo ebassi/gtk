@@ -25,6 +25,7 @@ noinst_PROGRAMS = $(TEST_PROGS)
 TEST_PROGS += \
 	actor-graph \
 	actor-iter \
+	base-types \
 	$(NULL)
 
 if BUILDOPT_INSTALL_TESTS

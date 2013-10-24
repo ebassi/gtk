@@ -102,6 +102,26 @@ CLUTTER_AVAILABLE_IN_3_12
 gboolean                clutter_actor_contains                  (ClutterActor *actor,
                                                                  ClutterActor *child);
 
+/* Position and size */
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_set_frame                 (ClutterActor       *actor,
+                                                                 const ClutterRect  *frame);
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_get_frame                 (ClutterActor       *actor,
+                                                                 ClutterRect        *rect);
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_set_bounds                (ClutterActor       *actor,
+                                                                 const ClutterRect  *bounds);
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_get_bounds                (ClutterActor       *actor,
+                                                                 ClutterRect        *bounds);
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_set_pivot_point           (ClutterActor       *actor,
+                                                                 const ClutterPoint *point);
+CLUTTER_AVAILABLE_IN_3_12
+void                    clutter_actor_get_pivot_point           (ClutterActor       *actor,
+                                                                 ClutterPoint       *point);
+
 /* General */
 CLUTTER_AVAILABLE_IN_3_12
 void                    clutter_actor_set_name                  (ClutterActor *actor,

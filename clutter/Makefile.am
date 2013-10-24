@@ -59,13 +59,18 @@ deprecated_sources =
 
 # Keep the following lists sorted alphabetically
 clutter_public_headers += \
-	clutteractor.h
+	clutteractor.h \
+	cluttermacros.h \
+	cluttertypes.h
 
 clutter_private_headers += \
 	clutteractorprivate.h
 
 clutter_base_c_sources += \
-	clutteractor.c
+	clutteractor.c \
+	clutterpoint.c \
+	clutterrect.c \
+	cluttersize.c
 
 #
 # Main library build rules; you should not modify anything below this point
