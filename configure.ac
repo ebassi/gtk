@@ -50,6 +50,7 @@ m4_define([introspection_required_version], [1.39.0])
 m4_define([wayland_required_version], [1.5.91])
 m4_define([mirclient_required_version], [0.11.0])
 m4_define([epoxy_required_version], [1.0])
+m4_define([graphene_required_version], [1.2])
 GLIB_REQUIRED_VERSION=glib_required_version
 PANGO_REQUIRED_VERSION=pango_required_version
 ATK_REQUIRED_VERSION=atk_required_version
@@ -1337,6 +1338,26 @@ AC_SUBST(GDK_EXTRA_CFLAGS)
 AC_SUBST(GDK_DEP_LIBS)
 AC_SUBST(GDK_DEP_CFLAGS)
 
+########################################
+# Check for GSK flags
+########################################
+
+GSK_EXTRA_LIBS=
+GSK_EXTRA_CFLAGS=
+
+GSK_PACKAGES="gdk-pixbuf-2.0 >= gdk_pixbuf_required_version cairo >= cairo_required_version cairo-gobject >= cairo_required_version graphene-1.0 >= graphene_required_version"
+GSK_PRIVATE_PACKAGES="epoxy >= epoxy_required_version"
+
+PKG_CHECK_MODULES(GSK_DEP, $PANGO_PACKAGES $GSK_PACKAGES $GSK_PRIVATE_PACKAGES)
+GSK_DEP_LIBS="$GSK_EXTRA_LIBS $GSK_DEP_LIBS $MATH_LIB"
+GSK_DEP_CFLAGS="$GSK_DEP_CFLAGS $GSK_EXTRA_CFLAGS"
+
+AC_SUBST(GSK_PACKAGES)
+AC_SUBST(GSK_PRIVATE_PACKAGES)
+AC_SUBST(GSK_EXTRA_LIBS)
+AC_SUBST(GSK_EXTRA_CFLAGS)
+AC_SUBST(GSK_DEP_LIBS)
+AC_SUBST(GSK_DEP_CFLAGS)
 
 ########################################
 # Check for Accessibility Toolkit flags
@@ -1351,7 +1372,7 @@ fi
 PKG_CHECK_MODULES(ATK, $ATK_PACKAGES)
 
 GTK_PACKAGES="atk >= atk_required_version cairo >= cairo_required_version cairo-gobject >= cairo_required_version gdk-pixbuf-2.0 >= gdk_pixbuf_required_version gio-2.0 >= glib_required_version"
-GTK_PRIVATE_PACKAGES="$ATK_PACKAGES $WAYLAND_PACKAGES $MIR_PACKAGES epoxy >= epoxy_required_version"
+GTK_PRIVATE_PACKAGES="$ATK_PACKAGES $WAYLAND_PACKAGES $MIR_PACKAGES epoxy >= epoxy_required_version graphene-1.0 >= graphene_required_version"
 if test "x$enable_x11_backend" = xyes; then
   GTK_PRIVATE_PACKAGES="$GTK_PRIVATE_PACKAGES pangoft2"
 fi
@@ -1879,6 +1900,7 @@ config.h.win32
 gtk-zip.sh
 Makefile
 gdk-3.0.pc
+gsk-3.0.pc
 gtk+-3.0.pc
 gtk+-unix-print-3.0.pc
 gail-3.0.pc
@@ -1910,6 +1932,7 @@ testsuite/a11y/state/Makefile
 testsuite/css/Makefile
 testsuite/css/parser/Makefile
 testsuite/gdk/Makefile
+testsuite/gsk/Makefile
 testsuite/gtk/Makefile
 testsuite/reftests/Makefile
 docs/Makefile
@@ -1942,6 +1965,7 @@ gdk/quartz/Makefile
 gdk/wayland/Makefile
 gdk/mir/Makefile
 gdk/gdkversionmacros.h
+gsk/Makefile
 gtk/Makefile
 gtk/makefile.msc
 gtk/gtkversion.h
