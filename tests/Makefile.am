@@ -67,6 +67,7 @@ noinst_PROGRAMS =  $(TEST_PROGS)	\
 	testfullscreen			\
 	testgeometry			\
 	testgiconpixbuf			\
+	testglarea			\
 	testgrid			\
 	testgtk				\
 	testheaderbar			\
