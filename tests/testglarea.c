@@ -157,7 +157,6 @@ main (int argc, char *argv[])
   gtk_window_set_default_size (GTK_WINDOW (window), 400, 400);
   gtk_container_set_border_width (GTK_CONTAINER (window), 12);
   g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-  gtk_widget_show (window);
 
   box = gtk_box_new (GTK_ORIENTATION_VERTICAL, FALSE);
   gtk_box_set_spacing (GTK_BOX (box), 6);
@@ -186,6 +185,8 @@ main (int argc, char *argv[])
   gtk_container_add (GTK_CONTAINER (box), button);
   g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_widget_destroy), window);
   gtk_widget_show (button);
+
+  gtk_widget_show (window);
 
   gtk_main ();
 
