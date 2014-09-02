@@ -51,6 +51,8 @@ struct _GdkX11GLContext
   GLXWindow dummy_glx_drawable;
 
   guint is_direct : 1;
+  guint do_frame_sync : 1;
+
 };
 
 struct _GdkX11GLContextClass

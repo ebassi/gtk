@@ -173,6 +173,7 @@ maybe_wait_for_vblank (GdkDisplay  *display,
 static void
 gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
 {
+  GdkX11GLContext *context_x11 = GDK_X11_GL_CONTEXT (context);
   GdkDisplay *display = gdk_gl_context_get_display (context);
   GdkWindow *window = gdk_gl_context_get_window (context);
   Display *dpy = gdk_x11_display_get_xdisplay (display);
@@ -214,7 +215,7 @@ gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
     if (display_x11->has_glx_video_sync)
       glXGetVideoSyncSGI (&end_frame_counter);
 
-    if (!display_x11->has_glx_swap_interval)
+    if (context_x11->do_frame_sync && !display_x11->has_glx_swap_interval)
       {
         glFinish ();
 
@@ -757,6 +758,8 @@ gdk_x11_display_make_gl_context_current (GdkDisplay   *display,
 {
   GdkX11GLContext *context_x11 = GDK_X11_GL_CONTEXT (context);
   GLXDrawable drawable = None;
+  GdkScreen *screen;
+  gboolean do_frame_sync = FALSE;
 
   if (context_x11->glx_context == NULL)
     return FALSE;
@@ -778,13 +781,23 @@ gdk_x11_display_make_gl_context_current (GdkDisplay   *display,
         drawable = info->drawable;
       else
         drawable = gdk_x11_window_get_xid (window);
+
+
+      // If the WM is compositing there is no particular need to delay
+      // the swap when drawing on the offscreen, rendering to the screen
+      // happens later anyway, and its up to the compositor to sync that
+      // to the vblank.
+      screen = gdk_window_get_screen (window);
+      do_frame_sync = ! gdk_screen_is_composited (screen) && gdk_gl_context_get_swap_interval (context);
     }
 
   if (G_UNLIKELY (drawable == None))
     return FALSE;
 
-  if (drawable == context_x11->current_drawable)
+  if (drawable == context_x11->current_drawable && context_x11->do_frame_sync == do_frame_sync)
     return TRUE;
+
+  context_x11->do_frame_sync = do_frame_sync;
 
   GDK_NOTE (OPENGL,
             g_print ("Making GLX context current to drawable %lu (dummy: %s)\n",
@@ -799,7 +812,7 @@ gdk_x11_display_make_gl_context_current (GdkDisplay   *display,
 
   if (GDK_X11_DISPLAY (display)->has_glx_swap_interval)
     {
-      if (gdk_gl_context_get_swap_interval (context))
+      if (context_x11->do_frame_sync)
         glXSwapIntervalSGI (1);
       else
         glXSwapIntervalSGI (0);
