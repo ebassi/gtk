@@ -150,6 +150,7 @@ noinst_PROGRAMS =  $(TEST_PROGS)	\
 	testactionbar			\
 	testwindowsize			\
 	testpopover			\
+	gdkgears			\
 	$(NULL)
 
 if USE_X11
