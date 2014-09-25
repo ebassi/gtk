@@ -21,6 +21,7 @@
 
 #include "gdkinternals.h"
 
+#include <epoxy/gl.h>
 #include <math.h>
 
 /**
@@ -524,4 +525,60 @@ gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
   cairo_region_translate (region, extents.x, extents.y);
 
   return region;
+}
+
+void
+gdk_cairo_draw_gl_framebuffer (cairo_t              *cr,
+			       int                   x,
+			       int                   y,
+			       int                   width,
+			       int                   height)
+{
+  cairo_surface_t *image;
+
+  /* TODO:
+     use fast path with:
+       simple clipping
+       translation
+     unless
+       complex clipping
+       transform not pure translation
+       push_group active
+       not directly on window
+
+     For fallback, avoid reading back non-required data due
+     to clipping.
+  */
+  if (1)
+    {
+      /* Software fallback */
+
+      image = cairo_image_surface_create (CAIRO_FORMAT_RGB24, width, height);
+
+      glPixelStorei (GL_PACK_ALIGNMENT, 4);
+      glPixelStorei (GL_PACK_ROW_LENGTH, cairo_image_surface_get_stride (image) / 4);
+
+      glReadPixels (x, y, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+		    cairo_image_surface_get_data (image));
+
+      cairo_surface_mark_dirty (image);
+
+      /* Invert due to opengl having different origin */
+      cairo_scale (cr, 1, -1);
+      cairo_translate (cr, 0, -height);
+
+      cairo_set_source_surface (cr, image, 0, 0);
+      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+      cairo_paint (cr);
+
+      cairo_surface_destroy (image);
+    }
+  else
+    {
+      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+      glBlitFramebufferEXT(x, y, width, height, x, y, width, height,
+			   GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+      //gtk_gl_area_flush_buffer (self);
+    }
 }

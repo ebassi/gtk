@@ -26,6 +26,7 @@
 #include "gtkstylecontext.h"
 #include "gtkmarshalers.h"
 #include "gtkprivate.h"
+#include <epoxy/gl.h>
 
 /**
  * SECTION:gtkglarea
@@ -156,6 +157,7 @@
 typedef struct {
   GdkGLPixelFormat *pixel_format;
   GdkGLContext *context;
+  GLuint framebuffer;
 } GtkGLAreaPrivate;
 
 enum {
@@ -255,8 +257,6 @@ gtk_gl_area_create_context (GtkGLArea *area)
       return NULL;
     }
 
-  gtk_widget_set_visual (GTK_WIDGET (area), gdk_gl_context_get_visual (context));
-
   priv->context = context;
 
   return priv->context;
@@ -265,50 +265,48 @@ gtk_gl_area_create_context (GtkGLArea *area)
 static void
 gtk_gl_area_realize (GtkWidget *widget)
 {
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private ((GtkGLArea *) widget);
   GdkGLContext *context;
-  GtkAllocation allocation;
-  GdkWindow *window;
-  GdkWindowAttr attributes;
-  gint attributes_mask;
 
+  GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->realize (widget);
+  
   context = gtk_gl_area_create_context (GTK_GL_AREA (widget));
-
-  gtk_widget_set_realized (widget, TRUE);
-  gtk_widget_get_allocation (widget, &allocation);
-
-  attributes.window_type = GDK_WINDOW_CHILD;
-  attributes.x = allocation.x;
-  attributes.y = allocation.y;
-  attributes.width = allocation.width;
-  attributes.height = allocation.height;
-  attributes.wclass = GDK_INPUT_OUTPUT;
-  attributes.visual = gtk_widget_get_visual (widget);
-  attributes.event_mask = gtk_widget_get_events (widget) |
-                          GDK_EXPOSURE_MASK |
-                          GDK_STRUCTURE_MASK;
-
-  attributes_mask = GDK_WA_X | GDK_WA_Y | GDK_WA_VISUAL;
-
-  window = gdk_window_new (gtk_widget_get_parent_window (widget),
-                           &attributes,
-                           attributes_mask);
-  gtk_widget_register_window (widget, window);
-  gtk_widget_set_window (widget, window);
-
   if (context != NULL)
     {
-      gdk_gl_context_set_window (context, window);
-      gdk_gl_context_update (context);
+      gdk_gl_context_set_window (context, gdk_window_get_toplevel (gtk_widget_get_window (widget)));
+
+      if (gdk_gl_context_make_current (context))
+	{
+	  glGenFramebuffersEXT (1, &priv->framebuffer);
+	  glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, priv->framebuffer);
+	}
+      else
+	{
+	  g_warning ("Unable to make new context current");
+	}
     }
 }
 
 static void
 gtk_gl_area_unrealize (GtkWidget *widget)
 {
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private ((GtkGLArea *) widget);
+  GtkGLArea *self = GTK_GL_AREA (widget);
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
 
   if (priv->context != NULL)
-    gdk_gl_context_set_window (priv->context, NULL);
+    {
+      if (priv->framebuffer != 0 && gtk_gl_area_make_current (self))
+	{
+	  /* Bind 0, which means render to back buffer, as a result, fb is unbound */
+	  glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, 0);
+	  glDeleteFramebuffersEXT (1, &priv->framebuffer);
+	  priv->framebuffer = 0;
+	}
+      else
+	g_warning ("can't free framebuffer");
+
+      gdk_gl_context_set_window (priv->context, NULL);
+    }
 
   GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->unrealize (widget);
 }
@@ -317,21 +315,7 @@ static void
 gtk_gl_area_size_allocate (GtkWidget     *widget,
                            GtkAllocation *allocation)
 {
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private ((GtkGLArea *) widget);
-
-  gtk_widget_set_allocation (widget, allocation);
-
-  if (!gtk_widget_get_realized (widget))
-    return;
-
-  gdk_window_move_resize (gtk_widget_get_window (widget),
-                          allocation->x,
-                          allocation->y,
-                          allocation->width,
-                          allocation->height);
-
-  if (priv->context != NULL)
-    gdk_gl_context_update (priv->context);
+  GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->size_allocate (widget, allocation);
 }
 
 static gboolean
@@ -341,6 +325,9 @@ gtk_gl_area_draw (GtkWidget *widget,
   GtkGLArea *self = GTK_GL_AREA (widget);
   GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
   gboolean unused;
+  int w, h;
+  GLuint color_rb, depth_rb = 0;
+  GLenum status;
 
   if (priv->context == NULL)
     return FALSE;
@@ -348,12 +335,50 @@ gtk_gl_area_draw (GtkWidget *widget,
   if (!gtk_gl_area_make_current (self))
     return FALSE;
 
-  g_signal_emit (self, area_signals[RENDER], 0, priv->context, &unused);
+  w = gtk_widget_get_allocated_width (widget);
+  h = gtk_widget_get_allocated_height (widget);
 
-  /* XXX: this will go away once gdk_window_end_paint() knows about
-   * GdkGLContext and calls it implicitly when needed
-   */
-  gtk_gl_area_flush_buffer (self);
+  glGenRenderbuffersEXT (1, &color_rb);
+  glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, color_rb);
+  glRenderbufferStorageEXT (GL_RENDERBUFFER_EXT, GL_RGBA8, w, h);
+  glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+				GL_RENDERBUFFER_EXT, color_rb);
+
+  if (gdk_gl_pixel_format_get_depth_size (priv->pixel_format) != 0)
+    {
+      glGenRenderbuffersEXT (1, &depth_rb);
+      glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, depth_rb);
+      /* TODO: Pick actual requested depth */
+      glRenderbufferStorageEXT (GL_RENDERBUFFER_EXT, GL_DEPTH_COMPONENT24, w, h);
+      glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
+				    GL_RENDERBUFFER_EXT, depth_rb);
+    }
+
+  status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+  if (status ==  GL_FRAMEBUFFER_COMPLETE_EXT)
+    {
+      glViewport(0, 0, w, h);
+      glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+      g_signal_emit (self, area_signals[RENDER], 0, priv->context, &unused);
+
+      glFlush();
+
+      glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, priv->framebuffer);
+
+      gdk_cairo_draw_gl_framebuffer (cr, 0, 0, w, h);
+
+      glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, priv->framebuffer);
+
+    }
+  else
+    {
+      g_print ("fb setup not supported\n");
+    }
+
+  glDeleteRenderbuffersEXT(1, &color_rb);
+  if (depth_rb != 0)
+    glDeleteRenderbuffersEXT(1, &depth_rb);
 
   return TRUE;
 }
@@ -380,6 +405,9 @@ gtk_gl_area_real_create_context (GtkGLArea        *area,
   if (display == NULL)
     display = gdk_display_get_default ();
 
+  /* TODO: This is a bit weird, we should not create e.g. a depth or stencil buffer
+     here, those all go in the fbo, we just need a context that can render to the
+     window back buffer. */
   retval = gdk_display_create_gl_context (display, format, &error);
   if (error != NULL)
     {
@@ -528,20 +556,8 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
 static void
 gtk_gl_area_init (GtkGLArea *self)
 {
-  gtk_widget_set_has_window (GTK_WIDGET (self), TRUE);
+  gtk_widget_set_has_window (GTK_WIDGET (self), FALSE);
   gtk_widget_set_app_paintable (GTK_WIDGET (self), TRUE);
-
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-  /* FIXME: we need this because double buffering inside GDK will
-   * clear the GL drawable we use, which means flickering. the
-   * proper way to fix this is to make GDK understand that a GDK
-   * window backed by a native window with a GL context will draw
-   * on the window itself, and that all the other drawing should
-   * happen on a seperate surface, which will then get blended via
-   * GL.
-   */
-  gtk_widget_set_double_buffered (GTK_WIDGET (self), FALSE);
-  G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
 /**
@@ -638,30 +654,4 @@ gtk_gl_area_make_current (GtkGLArea *area)
   gdk_gl_context_set_window (priv->context, gtk_widget_get_window (widget));
 
   return gdk_gl_context_make_current (priv->context);
-}
-
-/**
- * gtk_gl_area_flush_buffer:
- * @area: a #GtkGLArea
- *
- * Flushes the buffer associated with @area.
- *
- * This function is automatically called after emitting
- * the #GtkGLArea::render signal, and should not be called
- * by application code.
- *
- * Since: 3.14
- */
-void
-gtk_gl_area_flush_buffer (GtkGLArea *area)
-{
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
-
-  g_return_if_fail (GTK_IS_GL_AREA (area));
-  g_return_if_fail (gtk_widget_get_realized (GTK_WIDGET (area)));
-
-  if (priv->context == NULL)
-    return;
-
-  gdk_gl_context_flush_buffer (priv->context);
 }

@@ -88,8 +88,6 @@ GdkGLContext *  gtk_gl_area_get_context         (GtkGLArea        *area);
 
 GDK_AVAILABLE_IN_3_14
 gboolean        gtk_gl_area_make_current        (GtkGLArea        *area);
-GDK_AVAILABLE_IN_3_14
-void            gtk_gl_area_flush_buffer        (GtkGLArea        *area);
 
 G_END_DECLS
 
