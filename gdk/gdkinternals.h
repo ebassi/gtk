@@ -210,7 +210,9 @@ struct _GdkWindow
     cairo_region_t *region;
     cairo_surface_t *surface;
     gboolean surface_needs_composite;
+    gboolean use_gl;
   } current_paint;
+  GdkGLContext *gl_paint_context;
 
   cairo_region_t *update_area;
   guint update_freeze_count;
@@ -323,6 +325,8 @@ void _gdk_set_window_state (GdkWindow *window,
 
 gboolean _gdk_cairo_surface_extents (cairo_surface_t *surface,
                                      GdkRectangle *extents);
+void gdk_gl_texture_from_surface (cairo_surface_t *surface,
+				  cairo_region_t *region);
 
 /*************************************
  * Interfaces used by windowing code *

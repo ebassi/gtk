@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include "gdkcairo.h"
+#include "gdkglcontextprivate.h"
 
 #include "gdkinternals.h"
 
@@ -553,13 +554,17 @@ gdk_cairo_draw_gl_framebuffer (cairo_t              *cr,
     {
       /* Software fallback */
 
-      image = cairo_image_surface_create (CAIRO_FORMAT_RGB24, width, height);
+      image = cairo_surface_create_similar_image (cairo_get_target (cr),
+						  CAIRO_FORMAT_ARGB32,
+						  width, height);
 
       glPixelStorei (GL_PACK_ALIGNMENT, 4);
       glPixelStorei (GL_PACK_ROW_LENGTH, cairo_image_surface_get_stride (image) / 4);
 
       glReadPixels (x, y, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
 		    cairo_image_surface_get_data (image));
+
+      glPixelStorei (GL_PACK_ROW_LENGTH, 0);
 
       cairo_surface_mark_dirty (image);
 
@@ -581,4 +586,68 @@ gdk_cairo_draw_gl_framebuffer (cairo_t              *cr,
 
       //gtk_gl_area_flush_buffer (self);
     }
+}
+
+void
+gdk_gl_texture_from_surface (cairo_surface_t *surface,
+			     cairo_region_t *region)
+{
+  cairo_surface_t *image;
+  double device_x_offset, device_y_offset;
+  cairo_rectangle_int_t rect, e;
+  int n_rects, i;
+  GdkWindow *window;
+  int window_height;
+  unsigned int texture_id;
+
+  window = gdk_gl_context_get_window (gdk_gl_context_get_current ());
+  window_height = gdk_window_get_height (window);
+
+  cairo_surface_get_device_offset (surface,
+				   &device_x_offset, &device_y_offset);
+
+  glGenTextures (1, &texture_id);
+  glBindTexture (GL_TEXTURE_RECTANGLE_ARB, texture_id);
+  glEnable (GL_TEXTURE_RECTANGLE_ARB);
+  
+  n_rects = cairo_region_num_rectangles (region);
+  for (i = 0; i < n_rects; i++)
+    {
+      cairo_region_get_rectangle (region, i, &rect);
+
+      glScissor (rect.x, window_height - rect.y - rect.height,
+		 rect.width, rect.height);
+
+      e = rect;
+      e.x += (int)device_x_offset;
+      e.y += (int)device_y_offset;
+      image = cairo_surface_map_to_image (surface, &e);
+
+      glPixelStorei (GL_UNPACK_ALIGNMENT, 4);
+      glPixelStorei (GL_UNPACK_ROW_LENGTH, cairo_image_surface_get_stride (image)/4);
+      glTexImage2D (GL_TEXTURE_RECTANGLE_ARB, 0, 4, rect.width, rect.height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+		    cairo_image_surface_get_data (image));
+      glPixelStorei (GL_UNPACK_ROW_LENGTH, 0);
+
+      cairo_surface_unmap_image (surface, image);
+
+#define FLIP_Y(_y) (window_height - (_y))
+
+      glBegin (GL_QUADS);
+      glTexCoord2f (0.0f, rect.height);
+      glVertex2f (rect.x, FLIP_Y(rect.y + rect.height));
+	  
+      glTexCoord2f (rect.width, rect.height);
+      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y + rect.height));
+	  
+      glTexCoord2f (rect.width, 0.0f);
+      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y));
+	  
+      glTexCoord2f (0.0f, 0.0f);
+      glVertex2f (rect.x, FLIP_Y(rect.y));
+      glEnd();
+    }
+
+  glDisable (GL_TEXTURE_RECTANGLE_ARB);
+  glDeleteTextures (1, &texture_id);
 }

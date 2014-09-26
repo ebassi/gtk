@@ -42,6 +42,8 @@
 
 #include <math.h>
 
+#include <epoxy/gl.h>
+
 /* for the use of round() */
 #include "fallback-c89.c"
 
@@ -2741,6 +2743,7 @@ gdk_window_begin_paint_region (GdkWindow       *window,
   GdkWindowImplClass *impl_class;
   double sx, sy;
   gboolean needs_surface;
+  cairo_content_t surface_content;
 
   g_return_if_fail (GDK_IS_WINDOW (window));
 
@@ -2766,10 +2769,81 @@ gdk_window_begin_paint_region (GdkWindow       *window,
   cairo_region_intersect (window->current_paint.region, window->clip_region);
   cairo_region_get_extents (window->current_paint.region, &clip_box);
 
+  surface_content = gdk_window_get_content (window);
+
+  window->current_paint.use_gl = TRUE;
+
+  if (window->current_paint.use_gl)
+    {
+      cairo_rectangle_int_t rect;
+      int n_rects, i;
+      int ww = gdk_window_get_width (window);
+      int wh = gdk_window_get_height (window);
+
+      /* With gl we always need a surface to combine the gl
+	 drawing with the native drawing. */
+      needs_surface = TRUE;
+      /* Also, we need the surface to include alpha */
+      surface_content = CAIRO_CONTENT_COLOR_ALPHA;
+      
+      if (window->gl_paint_context == NULL)
+	{
+	  GdkGLPixelFormat *pixel_format;
+	  GdkGLContext *context;
+  
+	  pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
+	  context = gdk_display_create_gl_context (gdk_window_get_display (window),
+						   pixel_format, NULL);
+	  gdk_gl_context_set_window (context, window);
+	  window->gl_paint_context = context;
+
+	  if (!gdk_gl_context_make_current (context))
+	    {
+	      g_error ("make current failed");
+	    }
+
+	  /* Initial setup */
+	  glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
+	  glDisable (GL_DEPTH_TEST);
+	  glEnable (GL_SCISSOR_TEST);
+	  glEnable (GL_BLEND);
+	  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	  glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	}
+      else
+	{
+	  gdk_gl_context_set_window (window->gl_paint_context, window);
+	  if (!gdk_gl_context_make_current (window->gl_paint_context))
+	    {
+	      g_error ("make current failed");
+	    }
+	}
+
+      /* Per paint setup */
+      glViewport (0, 0, ww, wh);
+
+      glMatrixMode (GL_PROJECTION);
+      glLoadIdentity ();
+      glOrtho (0.0f, ww, 0.0f, wh, -1.0f, 1.0f);
+
+      glMatrixMode (GL_MODELVIEW);
+      glLoadIdentity ();
+
+      /* Clear background to transparent */
+      n_rects = cairo_region_num_rectangles (window->current_paint.region);
+      for (i = 0; i < n_rects; i++)
+	{
+	  cairo_region_get_rectangle (window->current_paint.region, i, &rect);
+	  glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
+	  glClear (GL_COLOR_BUFFER_BIT);
+	}
+      
+    }
+  
   if (needs_surface)
     {
       window->current_paint.surface = gdk_window_create_similar_surface (window,
-                                                                         gdk_window_get_content (window),
+									 surface_content,
                                                                          MAX (clip_box.width, 1),
                                                                          MAX (clip_box.height, 1));
       sx = sy = 1;
@@ -2838,31 +2912,72 @@ gdk_window_end_paint (GdkWindow *window)
       full_clip = cairo_region_copy (window->clip_region);
       cairo_region_intersect (full_clip, window->current_paint.region);
 
-      surface = gdk_window_ref_impl_surface (window);
-      cr = cairo_create (surface);
-      cairo_surface_destroy (surface);
+      if (window->current_paint.use_gl)
+	{
+	  int n_rects;
+	  cairo_rectangle_int_t rect;
+	  int wh = gdk_window_get_height (window);
+	  int i;
 
-      cairo_set_source_surface (cr, window->current_paint.surface, 0, 0);
-      gdk_cairo_region (cr, full_clip);
-      cairo_clip (cr);
+	  n_rects = cairo_region_num_rectangles (full_clip);
 
-      /* We can skip alpha blending for a fast composite case
-       * if we have an impl window or we're a fully opaque window. */
-      skip_alpha_blending = (gdk_window_has_impl (window) ||
-                             window->alpha == 255);
+	  gdk_gl_context_set_window (window->gl_paint_context, window);
+	  if (!gdk_gl_context_make_current (window->gl_paint_context))
+	    {
+	      g_error ("make current failed");
+	    }
 
-      if (skip_alpha_blending)
-        {
-          cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
-          cairo_paint (cr);
-        }
+	  /* TODO: apply overall alpha: window->alpha */
+	  /* TODO: only blend if we have to (i.e. we drew other gl content) */
+
+	  gdk_gl_texture_from_surface (window->current_paint.surface,
+				       full_clip);
+
+	  glDrawBuffer(GL_FRONT);
+	  glReadBuffer(GL_BACK);
+	  for (i = 0; i < n_rects; i++)
+	    {
+	      cairo_region_get_rectangle (full_clip, i, &rect);
+	      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
+	      glBlitFramebuffer (rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
+				 rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
+				 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	    }
+
+	  glDrawBuffer(GL_BACK);
+
+	  glFlush();
+
+	}
       else
-        {
-          cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-          cairo_paint_with_alpha (cr, window->alpha / 255.0);
-        }
+	{
+	  surface = gdk_window_ref_impl_surface (window);
+	  cr = cairo_create (surface);
+	  cairo_surface_destroy (surface);
 
-      cairo_destroy (cr);
+	  cairo_set_source_surface (cr, window->current_paint.surface, 0, 0);
+	  gdk_cairo_region (cr, full_clip);
+	  cairo_clip (cr);
+
+	  /* We can skip alpha blending for a fast composite case
+	   * if we have an impl window or we're a fully opaque window. */
+	  skip_alpha_blending = (gdk_window_has_impl (window) ||
+				 window->alpha == 255);
+
+	  if (skip_alpha_blending)
+	    {
+	      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+	      cairo_paint (cr);
+	    }
+	  else
+	    {
+	      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+	      cairo_paint_with_alpha (cr, window->alpha / 255.0);
+	    }
+
+	  cairo_destroy (cr);
+	}
+
       cairo_region_destroy (full_clip);
     }
 
