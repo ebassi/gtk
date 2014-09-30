@@ -794,8 +794,13 @@ gdk_x11_display_make_gl_context_current (GdkDisplay   *display,
   if (G_UNLIKELY (drawable == None))
     return FALSE;
 
+  /* TODO: This is wrong as current_drawable can be the same, but we get an entierly new context.
+     Comment this out for now, need to check out set_window() vs make_current() later
   if (drawable == context_x11->current_drawable && context_x11->do_frame_sync == do_frame_sync)
-    return TRUE;
+    {
+      return TRUE;
+    }
+  */
 
   context_x11->do_frame_sync = do_frame_sync;
 
