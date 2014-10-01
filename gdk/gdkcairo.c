@@ -592,6 +592,7 @@ void
 gdk_gl_texture_from_surface (cairo_surface_t *surface,
 			     cairo_region_t *region)
 {
+  GdkGLContext *current;
   cairo_surface_t *image;
   double device_x_offset, device_y_offset;
   cairo_rectangle_int_t rect, e;
@@ -599,6 +600,14 @@ gdk_gl_texture_from_surface (cairo_surface_t *surface,
   GdkWindow *window;
   int window_height;
   unsigned int texture_id;
+
+  current = gdk_gl_context_get_current ();
+  if (current &&
+      GDK_GL_CONTEXT_GET_CLASS (current)->texture_from_surface &&
+      GDK_GL_CONTEXT_GET_CLASS (current)->texture_from_surface (current, surface, region))
+    return;
+
+  /* Software fallback */
 
   window = gdk_gl_context_get_window (gdk_gl_context_get_current ());
   window_height = gdk_window_get_height (window);

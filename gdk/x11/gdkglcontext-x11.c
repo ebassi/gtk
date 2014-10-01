@@ -34,6 +34,8 @@
 
 #include "gdkintl.h"
 
+#include <cairo/cairo-xlib.h>
+
 #include <GL/glx.h>
 
 G_DEFINE_TYPE (GdkX11GLContext, gdk_x11_gl_context, GDK_TYPE_GL_CONTEXT)
@@ -237,6 +239,175 @@ gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
     glXGetVideoSyncSGI (&info->last_frame_counter);
 }
 
+static cairo_user_data_key_t glx_pixmap_key;
+
+typedef struct {
+  Display *display;
+  GLXDrawable drawable;
+  gboolean y_inverted;
+} GdkGLXPixmap;
+
+static void
+glx_pixmap_destroy (void *data)
+{
+  GdkGLXPixmap *glx_pixmap = data;
+
+  glXDestroyPixmap (glx_pixmap->display, glx_pixmap->drawable);
+
+  g_slice_free (GdkGLXPixmap, glx_pixmap);
+}
+
+static GdkGLXPixmap *
+glx_pixmap_get (cairo_surface_t *surface)
+{
+  Display *display = cairo_xlib_surface_get_display (surface);
+  Screen *screen = cairo_xlib_surface_get_screen (surface);
+  Visual *visual = cairo_xlib_surface_get_visual (surface);;
+  GdkGLXPixmap *glx_pixmap;
+  GLXFBConfig *fbconfigs;
+  int nfbconfigs;
+  XVisualInfo *visinfo;
+  int i, value;
+  gboolean y_inverted;
+  const int pixmap_attributes[] = {
+    GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_RECTANGLE_EXT,
+    GLX_TEXTURE_FORMAT_EXT, GLX_TEXTURE_FORMAT_RGBA_EXT,
+    None
+  };
+
+  glx_pixmap = cairo_surface_get_user_data (surface, &glx_pixmap_key);
+  if (glx_pixmap != NULL)
+    return glx_pixmap;
+
+  y_inverted = FALSE;
+  fbconfigs = glXGetFBConfigs (display, XScreenNumberOfScreen (screen), &nfbconfigs);
+  for (i = 0; i < nfbconfigs; i++)
+    {
+      visinfo = glXGetVisualFromFBConfig (display, fbconfigs[i]);
+      if (!visinfo || visinfo->visualid != XVisualIDFromVisual (visual))
+	continue;
+
+      glXGetFBConfigAttrib (display, fbconfigs[i], GLX_DRAWABLE_TYPE, &value);
+      if (!(value & GLX_PIXMAP_BIT))
+	continue;
+
+      glXGetFBConfigAttrib (display, fbconfigs[i],
+			    GLX_BIND_TO_TEXTURE_TARGETS_EXT,
+			    &value);
+      if (!(value & GLX_TEXTURE_RECTANGLE_BIT_EXT))
+	continue;
+
+      glXGetFBConfigAttrib (display, fbconfigs[i],
+			    GLX_BIND_TO_TEXTURE_RGBA_EXT,
+			    &value);
+      if (value == FALSE)
+	{
+	  glXGetFBConfigAttrib (display, fbconfigs[i],
+				GLX_BIND_TO_TEXTURE_RGB_EXT,
+				&value);
+	  if (value == FALSE)
+	    continue;
+	}
+
+      glXGetFBConfigAttrib (display, fbconfigs[i],
+			    GLX_Y_INVERTED_EXT,
+			    &value);
+      if (value == TRUE)
+	y_inverted = TRUE;
+
+      break;
+    }
+
+  if (i == nfbconfigs)
+    return NULL;
+
+  glx_pixmap = g_slice_new0 (GdkGLXPixmap);
+  glx_pixmap->y_inverted = y_inverted;
+  glx_pixmap->display = display;
+  glx_pixmap->drawable = glXCreatePixmap (display, fbconfigs[i],
+					  cairo_xlib_surface_get_drawable (surface),
+					  pixmap_attributes);
+
+  cairo_surface_set_user_data (surface, &glx_pixmap_key,
+			       glx_pixmap,  glx_pixmap_destroy);
+
+  XSync (display, False);
+
+  return glx_pixmap;
+}
+
+
+static gboolean
+gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
+					 cairo_surface_t *surface,
+					 cairo_region_t *region)
+{
+  GdkGLXPixmap *glx_pixmap;
+  double device_x_offset, device_y_offset;
+  cairo_rectangle_int_t rect;
+  int n_rects, i;
+  GdkWindow *window;
+  int window_height;
+  unsigned int texture_id;
+
+  if (cairo_surface_get_type (surface) != CAIRO_SURFACE_TYPE_XLIB)
+    return FALSE;
+
+  glx_pixmap = glx_pixmap_get (surface);
+  if (glx_pixmap == NULL)
+    return FALSE;
+
+  window = gdk_gl_context_get_window (gdk_gl_context_get_current ());
+  window_height = gdk_window_get_height (window);
+
+  cairo_surface_get_device_offset (surface,
+				   &device_x_offset, &device_y_offset);
+
+  glGenTextures (1, &texture_id);
+  glBindTexture (GL_TEXTURE_RECTANGLE_ARB, texture_id);
+  glEnable (GL_TEXTURE_RECTANGLE_ARB);
+
+  glXBindTexImageEXT (glx_pixmap->display, glx_pixmap->drawable,
+		      GLX_FRONT_LEFT_EXT, NULL);
+
+  n_rects = cairo_region_num_rectangles (region);
+  for (i = 0; i < n_rects; i++)
+    {
+      int src_x, src_y;
+      cairo_region_get_rectangle (region, i, &rect);
+
+      glScissor (rect.x, window_height - rect.y - rect.height,
+		 rect.width, rect.height);
+
+      src_x = rect.x + device_x_offset;
+      src_y = rect.y + device_y_offset;
+
+#define FLIP_Y(_y) (window_height - (_y))
+
+      glBegin (GL_QUADS);
+      glTexCoord2f (src_x, src_y + rect.height);
+      glVertex2f (rect.x, FLIP_Y(rect.y + rect.height));
+
+      glTexCoord2f (src_x + rect.width, src_y + rect.height);
+      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y + rect.height));
+
+      glTexCoord2f (src_x + rect.width, src_y);
+      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y));
+
+      glTexCoord2f (src_x, src_y);
+      glVertex2f (rect.x, FLIP_Y(rect.y));
+      glEnd();
+    }
+
+  glXReleaseTexImageEXT (glx_pixmap->display, glx_pixmap->drawable,
+			 GLX_FRONT_LEFT_EXT);
+
+  glDisable (GL_TEXTURE_RECTANGLE_ARB);
+  glDeleteTextures (1, &texture_id);
+
+  return TRUE;
+}
+
 static void
 gdk_x11_gl_context_class_init (GdkX11GLContextClass *klass)
 {
@@ -245,6 +416,7 @@ gdk_x11_gl_context_class_init (GdkX11GLContextClass *klass)
   context_class->set_window = gdk_x11_gl_context_set_window;
   context_class->update = gdk_x11_gl_context_update;
   context_class->flush_buffer = gdk_x11_gl_context_flush_buffer;
+  context_class->texture_from_surface = gdk_x11_gl_context_texture_from_surface;
 }
 
 static void

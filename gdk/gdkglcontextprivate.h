@@ -45,6 +45,9 @@ struct _GdkGLContextClass
   void (* update)          (GdkGLContext *context,
                             GdkWindow    *window);
   void (* flush_buffer)    (GdkGLContext *context);
+  gboolean (* texture_from_surface) (GdkGLContext    *context,
+				     cairo_surface_t *surface,
+				     cairo_region_t  *region);
 };
 
 gboolean        gdk_gl_context_get_swap_interval        (GdkGLContext *context);
