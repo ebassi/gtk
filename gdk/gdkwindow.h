@@ -1108,6 +1108,9 @@ GDK_AVAILABLE_IN_3_14
 gboolean  gdk_window_show_window_menu          (GdkWindow      *window,
                                                 GdkEvent       *event);
 
+GDK_AVAILABLE_IN_3_14
+GdkGLContext * gdk_window_get_paint_gl_context (GdkWindow *window);
+
 G_END_DECLS
 
 #endif /* __GDK_WINDOW_H__ */

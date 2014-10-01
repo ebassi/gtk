@@ -2667,22 +2667,22 @@ gdk_window_ref_impl_surface (GdkWindow *window)
   return GDK_WINDOW_IMPL_GET_CLASS (window->impl)->ref_cairo_surface (gdk_window_get_impl_window (window));
 }
 
-static GdkGLContext *
+GdkGLContext *
 gdk_window_get_paint_gl_context (GdkWindow *window)
 {
-  if (window->gl_paint_context == NULL)
+  if (window->impl_window->gl_paint_context == NULL)
     {
       GdkGLPixelFormat *pixel_format;
 
       pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
-      window->gl_paint_context = gdk_display_create_gl_context (gdk_window_get_display (window),
-								pixel_format, NULL);
-      if (window->gl_paint_context)
-	gdk_gl_context_set_window (window->gl_paint_context, window);
+      window->impl_window->gl_paint_context = gdk_display_create_gl_context (gdk_window_get_display (window),
+								      pixel_format, NULL);
+      if (window->impl_window->gl_paint_context)
+	gdk_gl_context_set_window (window->impl_window->gl_paint_context, window);
       g_object_unref (pixel_format);
     }
 
-  return window->gl_paint_context;
+  return window->impl_window->gl_paint_context;
 }
 
 /**
