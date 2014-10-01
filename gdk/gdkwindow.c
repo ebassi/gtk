@@ -2852,6 +2852,7 @@ gdk_window_begin_paint_region (GdkWindow       *window,
       cairo_surface_get_device_scale (window->current_paint.surface, &sx, &sy);
 #endif
       cairo_surface_set_device_offset (window->current_paint.surface, -clip_box.x*sx, -clip_box.y*sy);
+      gdk_cairo_surface_mark_as_direct (window->current_paint.surface, window);
 
       window->current_paint.surface_needs_composite = TRUE;
     }
@@ -2922,7 +2923,6 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  n_rects = cairo_region_num_rectangles (full_clip);
 
-	  gdk_gl_context_set_window (window->gl_paint_context, window);
 	  if (!gdk_gl_context_make_current (window->gl_paint_context))
 	    {
 	      g_error ("make current failed");
@@ -2930,7 +2930,6 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  /* TODO: apply overall alpha: window->alpha */
 	  /* TODO: only blend if we have to (i.e. we drew other gl content) */
-
 	  gdk_gl_texture_from_surface (window->current_paint.surface,
 				       full_clip);
 

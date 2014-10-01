@@ -528,36 +528,131 @@ gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
   return region;
 }
 
+static cairo_user_data_key_t direct_key;
+
 void
-gdk_cairo_draw_gl_framebuffer (cairo_t              *cr,
-			       int                   x,
-			       int                   y,
-			       int                   width,
-			       int                   height)
+gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
+				  GdkWindow *window)
 {
+  cairo_surface_set_user_data (surface, &direct_key,
+			       g_object_ref (window),  g_object_unref);
+}
+
+/* x,y,width,height describes a rectangle in the gl render buffer
+   coordinate space, and its top left corner is drawn at the current
+   position according to the cairo translation. */
+void
+gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
+				 GdkWindow            *window,
+				 int                   render_buffer,
+				 int                   x,
+				 int                   y,
+				 int                   width,
+				 int                   height)
+{
+  GdkGLContext *context;
   cairo_surface_t *image;
+  cairo_matrix_t matrix;
+  int dx, dy;
+  gboolean trivial_transform;
+  cairo_surface_t *group_target;
+  GdkWindow *direct_window;
+  cairo_rectangle_list_t *clip_rects;
+  GLuint framebuffer;
 
-  /* TODO:
-     use fast path with:
-       simple clipping
-       translation
-     unless
-       complex clipping
-       transform not pure translation
-       push_group active
-       not directly on window
+  context = gdk_window_get_paint_gl_context (window);
+  if (context == NULL)
+    {
+      g_warning ("gdk_cairo_draw_gl_render_buffer failed - no paint context");
+      return;
+    }
 
-     For fallback, avoid reading back non-required data due
-     to clipping.
-  */
-  if (1)
+  if (!gdk_gl_context_make_current (context))
+    g_error ("make current failed");
+
+  glGenFramebuffersEXT (1, &framebuffer);
+  glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, framebuffer);
+  glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, render_buffer);
+  glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+				GL_RENDERBUFFER_EXT, render_buffer);
+  glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+
+  group_target = cairo_get_group_target (cr);
+  direct_window = cairo_surface_get_user_data (group_target, &direct_key);
+  clip_rects = cairo_copy_clip_rectangle_list (cr);
+
+  cairo_get_matrix (cr, &matrix);
+
+  dx = matrix.x0;
+  dy = matrix.y0;
+
+  /* Trivial == integer-only translation */
+  trivial_transform =
+    (double)dx == matrix.x0 && (double)dy == matrix.y0 &&
+    matrix.xx == 1.0 && matrix.xy == 0.0 &&
+    matrix.yx == 0.0 && matrix.yy == 1.0;
+
+  if (direct_window != NULL &&
+      direct_window->current_paint.use_gl &&
+      trivial_transform &&
+      clip_rects->status == CAIRO_STATUS_SUCCESS)
+    {
+      int window_height;
+      int i;
+
+      window_height = gdk_window_get_height (window->impl_window);
+      glDrawBuffer (GL_BACK);
+
+#define FLIP_Y(_y) (window_height - (_y))
+
+      for (i = 0; i < clip_rects->num_rectangles; i++)
+	{
+	  cairo_rectangle_int_t clip_rect, dest;
+	  cairo_rectangle_t *rect;
+
+	  rect = &clip_rects->rectangles[i];
+	  /* Here we assume clip rects are ints for direct targets,
+	     which is true for cairo */
+	  clip_rect.x = (int)rect->x + dx;
+	  clip_rect.y = (int)rect->y + dy;
+	  clip_rect.width = (int)rect->width;
+	  clip_rect.height = (int)rect->height;
+
+	  glScissor (clip_rect.x, FLIP_Y (clip_rect.y + clip_rect.height),
+		     clip_rect.width, clip_rect.height);
+
+	  dest.x = dx;
+	  dest.y = dy;
+	  dest.width = width;
+	  dest.height = height;
+
+	  if (gdk_rectangle_intersect (&clip_rect, &dest, &dest))
+	    glBlitFramebufferEXT(x, y,
+				 x + dest.width, y + dest.height,
+				 dest.x, FLIP_Y (dest.y + dest.height),
+				 dest.x + dest.width, FLIP_Y (dest.y),
+				 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	}
+
+      /* Mark the area on the double buffer as transparent, so that we don't
+	 paint over the newly drawn gl area. */
+      /* TODO: Track areas that need not be blended over. */
+      cairo_save (cr);
+      cairo_set_source_rgba (cr, 0, 0, 0, 0);
+      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+      cairo_rectangle (cr, 0, 0, width, height);
+      cairo_fill (cr);
+      cairo_restore (cr);
+    }
+  else
     {
       /* Software fallback */
+
+      /* TODO: avoid reading back non-required data due to dest clip */
 
       image = cairo_surface_create_similar_image (cairo_get_target (cr),
 						  CAIRO_FORMAT_ARGB32,
 						  width, height);
-
       glPixelStorei (GL_PACK_ALIGNMENT, 4);
       glPixelStorei (GL_PACK_ROW_LENGTH, cairo_image_surface_get_stride (image) / 4);
 
@@ -577,15 +672,16 @@ gdk_cairo_draw_gl_framebuffer (cairo_t              *cr,
       cairo_paint (cr);
 
       cairo_surface_destroy (image);
-    }
-  else
-    {
-      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
-      glBlitFramebufferEXT(x, y, width, height, x, y, width, height,
-			   GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-      //gtk_gl_area_flush_buffer (self);
     }
+
+  glDrawBuffer (GL_BACK);
+  glReadBuffer(GL_BACK);
+
+  glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, 0);
+  glDeleteFramebuffersEXT (1, &framebuffer);
+
+  cairo_rectangle_list_destroy (clip_rects);
 }
 
 void

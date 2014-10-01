@@ -327,6 +327,8 @@ gboolean _gdk_cairo_surface_extents (cairo_surface_t *surface,
                                      GdkRectangle *extents);
 void gdk_gl_texture_from_surface (cairo_surface_t *surface,
 				  cairo_region_t *region);
+void gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
+				       GdkWindow       *window);
 
 /*************************************
  * Interfaces used by windowing code *

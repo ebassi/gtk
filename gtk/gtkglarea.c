@@ -364,12 +364,12 @@ gtk_gl_area_draw (GtkWidget *widget,
 
       glFlush();
 
-      glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, priv->framebuffer);
+      gdk_cairo_draw_gl_render_buffer (cr,
+				       gtk_widget_get_window (widget),
+				       color_rb, 0, 0, w, h);
 
-      gdk_cairo_draw_gl_framebuffer (cr, 0, 0, w, h);
-
-      glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, priv->framebuffer);
-
+      if (!gtk_gl_area_make_current (self))
+	g_error ("can't make old context current again");
     }
   else
     {
@@ -400,6 +400,7 @@ gtk_gl_area_real_create_context (GtkGLArea        *area,
 {
   GdkDisplay *display = gtk_widget_get_display (GTK_WIDGET (area));
   GdkGLContext *retval;
+  GdkWindow *window;
   GError *error = NULL;
 
   if (display == NULL)
@@ -408,7 +409,10 @@ gtk_gl_area_real_create_context (GtkGLArea        *area,
   /* TODO: This is a bit weird, we should not create e.g. a depth or stencil buffer
      here, those all go in the fbo, we just need a context that can render to the
      window back buffer. */
-  retval = gdk_display_create_gl_context (display, format, &error);
+  window = gtk_widget_get_window (GTK_WIDGET (area));
+  retval = gdk_display_create_shared_gl_context (display, format,
+						 gdk_window_get_paint_gl_context (window),
+						 &error);
   if (error != NULL)
     {
       g_critical ("Unable to create a GdkGLContext: %s", error->message);
