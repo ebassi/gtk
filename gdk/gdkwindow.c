@@ -2667,6 +2667,24 @@ gdk_window_ref_impl_surface (GdkWindow *window)
   return GDK_WINDOW_IMPL_GET_CLASS (window->impl)->ref_cairo_surface (gdk_window_get_impl_window (window));
 }
 
+static GdkGLContext *
+gdk_window_get_paint_gl_context (GdkWindow *window)
+{
+  if (window->gl_paint_context == NULL)
+    {
+      GdkGLPixelFormat *pixel_format;
+
+      pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
+      window->gl_paint_context = gdk_display_create_gl_context (gdk_window_get_display (window),
+								pixel_format, NULL);
+      if (window->gl_paint_context)
+	gdk_gl_context_set_window (window->gl_paint_context, window);
+      g_object_unref (pixel_format);
+    }
+
+  return window->gl_paint_context;
+}
+
 /**
  * gdk_window_begin_paint_rect:
  * @window: a #GdkWindow
@@ -2775,32 +2793,26 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 
   if (window->current_paint.use_gl)
     {
+      GdkGLContext *context;
       cairo_rectangle_int_t rect;
       int n_rects, i;
       int ww = gdk_window_get_width (window);
       int wh = gdk_window_get_height (window);
 
-      /* With gl we always need a surface to combine the gl
-	 drawing with the native drawing. */
-      needs_surface = TRUE;
-      /* Also, we need the surface to include alpha */
-      surface_content = CAIRO_CONTENT_COLOR_ALPHA;
-      
-      if (window->gl_paint_context == NULL)
-	{
-	  GdkGLPixelFormat *pixel_format;
-	  GdkGLContext *context;
-  
-	  pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
-	  context = gdk_display_create_gl_context (gdk_window_get_display (window),
-						   pixel_format, NULL);
-	  gdk_gl_context_set_window (context, window);
-	  window->gl_paint_context = context;
+      context = gdk_window_get_paint_gl_context (window);
 
-	  if (!gdk_gl_context_make_current (context))
-	    {
-	      g_error ("make current failed");
-	    }
+      if (context == NULL || !gdk_gl_context_make_current (context))
+	{
+	  g_warning ("gl rendering failed");
+	  window->current_paint.use_gl = FALSE;
+	}
+      else
+	{
+	  /* With gl we always need a surface to combine the gl
+	     drawing with the native drawing. */
+	  needs_surface = TRUE;
+	  /* Also, we need the surface to include alpha */
+	  surface_content = CAIRO_CONTENT_COLOR_ALPHA;
 
 	  /* Initial setup */
 	  glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
@@ -2809,35 +2821,24 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 	  glEnable (GL_BLEND);
 	  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	  glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-	}
-      else
-	{
-	  gdk_gl_context_set_window (window->gl_paint_context, window);
-	  if (!gdk_gl_context_make_current (window->gl_paint_context))
+	  glViewport (0, 0, ww, wh);
+	  
+	  glMatrixMode (GL_PROJECTION);
+	  glLoadIdentity ();
+	  glOrtho (0.0f, ww, 0.0f, wh, -1.0f, 1.0f);
+
+	  glMatrixMode (GL_MODELVIEW);
+	  glLoadIdentity ();
+
+	  /* Clear background to transparent */
+	  n_rects = cairo_region_num_rectangles (window->current_paint.region);
+	  for (i = 0; i < n_rects; i++)
 	    {
-	      g_error ("make current failed");
+	      cairo_region_get_rectangle (window->current_paint.region, i, &rect);
+	      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
+	      glClear (GL_COLOR_BUFFER_BIT);
 	    }
 	}
-
-      /* Per paint setup */
-      glViewport (0, 0, ww, wh);
-
-      glMatrixMode (GL_PROJECTION);
-      glLoadIdentity ();
-      glOrtho (0.0f, ww, 0.0f, wh, -1.0f, 1.0f);
-
-      glMatrixMode (GL_MODELVIEW);
-      glLoadIdentity ();
-
-      /* Clear background to transparent */
-      n_rects = cairo_region_num_rectangles (window->current_paint.region);
-      for (i = 0; i < n_rects; i++)
-	{
-	  cairo_region_get_rectangle (window->current_paint.region, i, &rect);
-	  glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
-	  glClear (GL_COLOR_BUFFER_BIT);
-	}
-      
     }
   
   if (needs_surface)
