@@ -3053,21 +3053,8 @@ gdk_window_end_paint (GdkWindow *window)
 	  gdk_cairo_region (cr, window->current_paint.region);
 	  cairo_clip (cr);
 
-	  /* We can skip alpha blending for a fast composite case
-	   * if we have an impl window or we're a fully opaque window. */
-	  skip_alpha_blending = (gdk_window_has_impl (window) ||
-				 window->alpha == 255);
-
-	  if (skip_alpha_blending)
-	    {
-	      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
-	      cairo_paint (cr);
-	    }
-	  else
-	    {
-	      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-	      cairo_paint_with_alpha (cr, window->alpha / 255.0);
-	    }
+	  cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+	  cairo_paint (cr);
 
 	  cairo_destroy (cr);
 	}
