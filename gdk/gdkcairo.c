@@ -556,9 +556,11 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   int dx, dy;
   gboolean trivial_transform;
   cairo_surface_t *group_target;
-  GdkWindow *direct_window;
+  GdkWindow *direct_window, *impl_window;
   cairo_rectangle_list_t *clip_rects;
   GLuint framebuffer;
+
+  impl_window = window->impl_window;
 
   context = gdk_window_get_paint_gl_context (window);
   if (context == NULL)
@@ -600,7 +602,7 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       int window_height;
       int i;
 
-      window_height = gdk_window_get_height (window->impl_window);
+      window_height = gdk_window_get_height (impl_window);
       glDrawBuffer (GL_BACK);
 
 #define FLIP_Y(_y) (window_height - (_y))
@@ -627,11 +629,15 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 	  dest.height = height;
 
 	  if (gdk_rectangle_intersect (&clip_rect, &dest, &dest))
-	    glBlitFramebufferEXT(x, y,
-				 x + dest.width, y + dest.height,
-				 dest.x, FLIP_Y (dest.y + dest.height),
-				 dest.x + dest.width, FLIP_Y (dest.y),
-				 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	    {
+	      int clipped_src_x = x + (dest.x - dx);
+	      int clipped_src_y = y  + height -dest.height - (dest.y - dy);
+	      glBlitFramebufferEXT(clipped_src_x, clipped_src_y,
+				   clipped_src_x + dest.width, clipped_src_y + dest.height,
+				   dest.x, FLIP_Y (dest.y + dest.height),
+				   dest.x + dest.width, FLIP_Y (dest.y),
+				   GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	    }
 	}
 
       /* Mark the area on the double buffer as transparent, so that we don't
