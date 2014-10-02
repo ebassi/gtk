@@ -637,18 +637,11 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 				   dest.x, FLIP_Y (dest.y + dest.height),
 				   dest.x + dest.width, FLIP_Y (dest.y),
 				   GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	      if (impl_window->current_paint.flushed_region)
+		cairo_region_union_rectangle (impl_window->current_paint.flushed_region,
+					      &dest);
 	    }
 	}
-
-      /* Mark the area on the double buffer as transparent, so that we don't
-	 paint over the newly drawn gl area. */
-      /* TODO: Track areas that need not be blended over. */
-      cairo_save (cr);
-      cairo_set_source_rgba (cr, 0, 0, 0, 0);
-      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
-      cairo_rectangle (cr, 0, 0, width, height);
-      cairo_fill (cr);
-      cairo_restore (cr);
     }
   else
     {

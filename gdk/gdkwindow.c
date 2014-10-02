@@ -1840,6 +1840,12 @@ gdk_window_free_current_paint (GdkWindow *window)
   cairo_region_destroy (window->current_paint.region);
   window->current_paint.region = NULL;
 
+  cairo_region_destroy (window->current_paint.flushed_region);
+  window->current_paint.flushed_region = NULL;
+
+  cairo_region_destroy (window->current_paint.need_blend_region);
+  window->current_paint.need_blend_region = NULL;
+
   window->current_paint.surface_needs_composite = FALSE;
 }
 
@@ -2674,6 +2680,7 @@ gdk_window_get_paint_gl_context (GdkWindow *window)
     {
       GdkGLPixelFormat *pixel_format;
 
+      /* TODO: Should we set alpha-size to 8 here for e.g. csd windows? */
       pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
       window->impl_window->gl_paint_context = gdk_display_create_gl_context (gdk_window_get_display (window),
 								      pixel_format, NULL);
@@ -2683,22 +2690,6 @@ gdk_window_get_paint_gl_context (GdkWindow *window)
     }
 
   return window->impl_window->gl_paint_context;
-}
-
-static void
-gdk_gl_clear_region (GdkWindow *window, cairo_region_t *region)
-{
-  int n_rects, i;
-  cairo_rectangle_int_t rect;
-  int wh = gdk_window_get_height (window);
-
-  n_rects = cairo_region_num_rectangles (region);
-  for (i = 0; i < n_rects; i++)
-    {
-      cairo_region_get_rectangle (region, i, &rect);
-      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
-      glClear (GL_COLOR_BUFFER_BIT);
-    }
 }
 
 static void
@@ -2820,6 +2811,8 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 
   cairo_region_intersect (window->current_paint.region, window->clip_region);
   cairo_region_get_extents (window->current_paint.region, &clip_box);
+  window->current_paint.flushed_region = cairo_region_create ();
+  window->current_paint.need_blend_region = cairo_region_create ();
 
   surface_content = gdk_window_get_content (window);
 
@@ -2850,7 +2843,7 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 	  glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
 	  glDisable (GL_DEPTH_TEST);
 	  glEnable (GL_SCISSOR_TEST);
-	  glEnable (GL_BLEND);
+	  glDisable(GL_BLEND);
 	  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	  glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	  glViewport (0, 0, ww, wh);
@@ -2861,9 +2854,6 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 
 	  glMatrixMode (GL_MODELVIEW);
 	  glLoadIdentity ();
-
-	  /* Clear background to transparent */
-	  gdk_gl_clear_region (window, window->current_paint.region);
 	}
     }
   
@@ -2892,6 +2882,94 @@ gdk_window_begin_paint_region (GdkWindow       *window,
     gdk_window_clear_backing_region (window);
 }
 
+static cairo_region_t *
+gdk_cairo_region_from_clip (cairo_t *cr)
+{
+  cairo_rectangle_list_t *rectangles;
+  cairo_region_t *region;
+  int i;
+
+  rectangles = cairo_copy_clip_rectangle_list (cr);
+
+  if (rectangles->status != CAIRO_STATUS_SUCCESS)
+    return NULL;
+
+  region = cairo_region_create ();
+  for (i = 0; i < rectangles->num_rectangles; i++)
+    {
+      cairo_rectangle_int_t clip_rect;
+      cairo_rectangle_t *rect;
+
+      rect = &rectangles->rectangles[i];
+
+      /* Here we assume clip rects are ints for direct targets, which
+	 is true for cairo */
+      clip_rect.x = (int)rect->x;
+      clip_rect.y = (int)rect->y;
+      clip_rect.width = (int)rect->width;
+      clip_rect.height = (int)rect->height;
+	  
+      cairo_region_union_rectangle (region, &clip_rect);
+    }
+
+  cairo_rectangle_list_destroy (rectangles);
+  
+  return region;
+}
+
+void
+gdk_window_mark_paint_from_clip (GdkWindow          *window,
+				 cairo_t            *cr)
+{
+  cairo_region_t *clip_region;
+  GdkWindow *impl_window = window->impl_window;
+
+  if (impl_window->current_paint.surface == NULL ||
+      cairo_get_target (cr) != impl_window->current_paint.surface)
+    return;
+  
+  if (cairo_region_is_empty (impl_window->current_paint.flushed_region))
+    return;
+
+  /* This here seems a bit weird, but basically, we're taking the current
+     clip and applying also the flushed region, and the result is that the
+     new clip is the intersection of these. This is the area where the newly
+     drawn region overlaps a previosly flushed area, which is an area of the
+     double buffer surface that need to be blended OVER the back buffer rather
+     than SRCed. */
+  cairo_save (cr);
+  /* We set the indentity matrix here so we get and apply regions in native
+     window coordinates. */
+  cairo_identity_matrix (cr);
+  gdk_cairo_region (cr, impl_window->current_paint.flushed_region);
+  cairo_clip (cr);
+
+  clip_region = gdk_cairo_region_from_clip (cr);
+  if (clip_region == NULL)
+    {
+      /* Failed to represent clip as region, mark all as requiring
+	 blend */
+      cairo_region_union (impl_window->current_paint.need_blend_region,
+			  impl_window->current_paint.flushed_region);
+      cairo_region_destroy (impl_window->current_paint.flushed_region);
+      impl_window->current_paint.flushed_region = cairo_region_create ();
+    }
+  else
+    {
+      cairo_region_subtract (impl_window->current_paint.flushed_region, clip_region);
+      cairo_region_union (impl_window->current_paint.need_blend_region, clip_region);
+    }
+
+  /* Clear the area on the double buffer surface to transparent so we
+     can start drawing from scratch the area "above" the flushed
+     region */
+  cairo_set_source_rgba (cr, 0, 0, 0, 0);
+  cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+  cairo_paint (cr);
+
+  cairo_restore (cr);
+}
+
 /**
  * gdk_window_end_paint:
  * @window: a #GdkWindow
@@ -2911,7 +2989,6 @@ gdk_window_end_paint (GdkWindow *window)
   GdkWindow *composited;
   GdkWindowImplClass *impl_class;
   GdkRectangle clip_box = { 0, };
-  cairo_region_t *full_clip;
   cairo_t *cr;
 
   g_return_if_fail (GDK_IS_WINDOW (window));
@@ -2937,24 +3014,30 @@ gdk_window_end_paint (GdkWindow *window)
       gboolean skip_alpha_blending;
 
       cairo_region_get_extents (window->current_paint.region, &clip_box);
-      full_clip = cairo_region_copy (window->clip_region);
-      cairo_region_intersect (full_clip, window->current_paint.region);
 
       if (window->current_paint.use_gl)
 	{
+	  cairo_region_t *opaque_region = cairo_region_copy (window->current_paint.region);
+	  cairo_region_subtract (opaque_region, window->current_paint.flushed_region);
+	  cairo_region_subtract (opaque_region, window->current_paint.need_blend_region);
+
 	  if (!gdk_gl_context_make_current (window->gl_paint_context))
 	    {
 	      g_error ("make current failed");
 	    }
 
-	  /* TODO: apply overall alpha: window->alpha */
-	  /* TODO: only blend if we have to (i.e. we drew other gl content) */
 	  gdk_gl_texture_from_surface (window->current_paint.surface,
-				       full_clip);
+				       opaque_region);
+	  glEnable(GL_BLEND);
+	  gdk_gl_texture_from_surface (window->current_paint.surface,
+				       window->current_paint.need_blend_region);
+	  glDisable(GL_BLEND);
+
+	  cairo_region_destroy (opaque_region);
 
 	  glDrawBuffer(GL_FRONT);
 	  glReadBuffer(GL_BACK);
-	  gdk_gl_blit_region (window, full_clip);
+	  gdk_gl_blit_region (window, window->current_paint.region);
 	  glDrawBuffer(GL_BACK);
 
 	  glFlush();
@@ -2967,7 +3050,7 @@ gdk_window_end_paint (GdkWindow *window)
 	  cairo_surface_destroy (surface);
 
 	  cairo_set_source_surface (cr, window->current_paint.surface, 0, 0);
-	  gdk_cairo_region (cr, full_clip);
+	  gdk_cairo_region (cr, window->current_paint.region);
 	  cairo_clip (cr);
 
 	  /* We can skip alpha blending for a fast composite case
@@ -2988,8 +3071,6 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  cairo_destroy (cr);
 	}
-
-      cairo_region_destroy (full_clip);
     }
 
   gdk_window_free_current_paint (window);

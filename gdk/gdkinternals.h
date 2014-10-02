@@ -209,6 +209,14 @@ struct _GdkWindow
   struct {
     cairo_region_t *region;
     cairo_surface_t *surface;
+
+    /* Areas of region that have been copied to the back buffer already */
+    cairo_region_t *flushed_region;
+    /* Areas of region that have been copied to the back buffer but
+       needs furter blending of surface data. These two regions are
+       always non-intersecting. */
+    cairo_region_t *need_blend_region;
+
     gboolean surface_needs_composite;
     gboolean use_gl;
   } current_paint;
