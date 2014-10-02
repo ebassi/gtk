@@ -468,6 +468,14 @@ gtk_gears_set_fps_label (GtkGears *gears, GtkLabel *label)
  ************************************************************************/
 
 static void
+toggle_overlay (GtkWidget *checkbutton,
+		GtkWidget *revealer)
+{
+  gtk_revealer_set_reveal_child (GTK_REVEALER (revealer),
+				 gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(checkbutton)));
+}
+
+static void
 toggle_spin (GtkWidget *checkbutton,
              GtkWidget *spinner)
 {
@@ -551,7 +559,9 @@ moar_gears (GtkButton *button, gpointer data)
 int
 main (int argc, char *argv[])
 {
-  GtkWidget *window, *box, *hbox, *button, *spinner, *check, *fps_label, *gears, *extra_hbox, *bbox;
+  GtkWidget *window, *box, *hbox, *button, *spinner, *check,
+    *fps_label, *gears, *extra_hbox, *bbox, *overlay,
+    *revealer, *frame, *label;
   int i;
 
   gtk_init (&argc, &argv);
@@ -562,9 +572,35 @@ main (int argc, char *argv[])
   gtk_container_set_border_width (GTK_CONTAINER (window), 12);
   g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
+  overlay = gtk_overlay_new ();
+  gtk_container_add (GTK_CONTAINER (window), overlay);
+  gtk_widget_show (overlay);
+
+  revealer = gtk_revealer_new ();
+  gtk_widget_set_halign (revealer, GTK_ALIGN_END);
+  gtk_widget_set_valign (revealer, GTK_ALIGN_START);
+  gtk_overlay_add_overlay (GTK_OVERLAY (overlay),
+			   revealer);
+  gtk_widget_show (revealer);
+
+  frame = gtk_frame_new (NULL);
+  gtk_style_context_add_class (gtk_widget_get_style_context (frame),
+			       "app-notification");
+  gtk_container_add (GTK_CONTAINER (revealer), frame);
+  gtk_widget_show (frame);
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, FALSE);
+  gtk_box_set_spacing (GTK_BOX (hbox), 6);
+  gtk_container_add (GTK_CONTAINER (frame), hbox);
+  gtk_widget_show (hbox);
+
+  label = gtk_label_new ("This is a transparent overlay widget!!!!");
+  gtk_container_add (GTK_CONTAINER (hbox), label);
+  gtk_widget_show (label);
+
   box = gtk_box_new (GTK_ORIENTATION_VERTICAL, FALSE);
   gtk_box_set_spacing (GTK_BOX (box), 6);
-  gtk_container_add (GTK_CONTAINER (window), box);
+  gtk_container_add (GTK_CONTAINER (overlay), box);
   gtk_widget_show (box);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, FALSE);
@@ -602,6 +638,13 @@ main (int argc, char *argv[])
   gtk_widget_show (check);
   g_signal_connect (check, "toggled",
                     G_CALLBACK (toggle_spin), spinner);
+
+  check = gtk_check_button_new_with_label ("Overlay");
+  gtk_box_pack_end (GTK_BOX (hbox), check, FALSE, FALSE, 0);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (check), FALSE);
+  gtk_widget_show (check);
+  g_signal_connect (check, "toggled",
+                    G_CALLBACK (toggle_overlay), revealer);
 
 
   extra_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, FALSE);
