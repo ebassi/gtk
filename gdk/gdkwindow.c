@@ -2685,6 +2685,40 @@ gdk_window_get_paint_gl_context (GdkWindow *window)
   return window->impl_window->gl_paint_context;
 }
 
+static void
+gdk_gl_clear_region (GdkWindow *window, cairo_region_t *region)
+{
+  int n_rects, i;
+  cairo_rectangle_int_t rect;
+  int wh = gdk_window_get_height (window);
+
+  n_rects = cairo_region_num_rectangles (region);
+  for (i = 0; i < n_rects; i++)
+    {
+      cairo_region_get_rectangle (region, i, &rect);
+      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
+      glClear (GL_COLOR_BUFFER_BIT);
+    }
+}
+
+static void
+gdk_gl_blit_region (GdkWindow *window, cairo_region_t *region)
+{
+  int n_rects, i;
+  int wh = gdk_window_get_height (window);
+  cairo_rectangle_int_t rect;
+
+  n_rects = cairo_region_num_rectangles (region);
+  for (i = 0; i < n_rects; i++)
+    {
+      cairo_region_get_rectangle (region, i, &rect);
+      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
+      glBlitFramebuffer (rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
+			 rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
+			 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+}
+
 /**
  * gdk_window_begin_paint_rect:
  * @window: a #GdkWindow
@@ -2794,8 +2828,6 @@ gdk_window_begin_paint_region (GdkWindow       *window,
   if (window->current_paint.use_gl)
     {
       GdkGLContext *context;
-      cairo_rectangle_int_t rect;
-      int n_rects, i;
       int ww = gdk_window_get_width (window);
       int wh = gdk_window_get_height (window);
 
@@ -2831,13 +2863,7 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 	  glLoadIdentity ();
 
 	  /* Clear background to transparent */
-	  n_rects = cairo_region_num_rectangles (window->current_paint.region);
-	  for (i = 0; i < n_rects; i++)
-	    {
-	      cairo_region_get_rectangle (window->current_paint.region, i, &rect);
-	      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
-	      glClear (GL_COLOR_BUFFER_BIT);
-	    }
+	  gdk_gl_clear_region (window, window->current_paint.region);
 	}
     }
   
@@ -2916,13 +2942,6 @@ gdk_window_end_paint (GdkWindow *window)
 
       if (window->current_paint.use_gl)
 	{
-	  int n_rects;
-	  cairo_rectangle_int_t rect;
-	  int wh = gdk_window_get_height (window);
-	  int i;
-
-	  n_rects = cairo_region_num_rectangles (full_clip);
-
 	  if (!gdk_gl_context_make_current (window->gl_paint_context))
 	    {
 	      g_error ("make current failed");
@@ -2935,15 +2954,7 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  glDrawBuffer(GL_FRONT);
 	  glReadBuffer(GL_BACK);
-	  for (i = 0; i < n_rects; i++)
-	    {
-	      cairo_region_get_rectangle (full_clip, i, &rect);
-	      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
-	      glBlitFramebuffer (rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
-				 rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
-				 GL_COLOR_BUFFER_BIT, GL_NEAREST);
-	    }
-
+	  gdk_gl_blit_region (window, full_clip);
 	  glDrawBuffer(GL_BACK);
 
 	  glFlush();
