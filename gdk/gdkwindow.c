@@ -3011,7 +3011,6 @@ gdk_window_end_paint (GdkWindow *window)
   if (window->current_paint.surface_needs_composite)
     {
       cairo_surface_t *surface;
-      gboolean skip_alpha_blending;
 
       cairo_region_get_extents (window->current_paint.region, &clip_box);
 
@@ -3028,10 +3027,13 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  gdk_gl_texture_from_surface (window->current_paint.surface,
 				       opaque_region);
-	  glEnable(GL_BLEND);
-	  gdk_gl_texture_from_surface (window->current_paint.surface,
-				       window->current_paint.need_blend_region);
-	  glDisable(GL_BLEND);
+          if (!cairo_region_is_empty (window->current_paint.need_blend_region))
+            {
+              glEnable(GL_BLEND);
+              gdk_gl_texture_from_surface (window->current_paint.surface,
+                                           window->current_paint.need_blend_region);
+              glDisable(GL_BLEND);
+            }
 
 	  cairo_region_destroy (opaque_region);
 
