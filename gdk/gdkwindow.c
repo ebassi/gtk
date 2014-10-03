@@ -3045,6 +3045,8 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  glFlush();
 
+          if (epoxy_has_gl_extension ("GL_GREMEDY_frame_terminator"))
+            glFrameTerminatorGREMEDY();
 	}
       else
 	{
