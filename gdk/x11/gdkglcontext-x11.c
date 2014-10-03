@@ -359,6 +359,9 @@ gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
   cairo_surface_get_device_offset (surface,
 				   &device_x_offset, &device_y_offset);
 
+  /* Ensure all the X stuff are synced before we read it back via texture-from-pixmap */
+  glXWaitX();
+
   glGenTextures (1, &texture_id);
   glBindTexture (GL_TEXTURE_RECTANGLE_ARB, texture_id);
   glEnable (GL_TEXTURE_RECTANGLE_ARB);
