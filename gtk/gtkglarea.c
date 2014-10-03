@@ -325,7 +325,7 @@ gtk_gl_area_draw (GtkWidget *widget,
   GtkGLArea *self = GTK_GL_AREA (widget);
   GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
   gboolean unused;
-  int w, h;
+  int w, h, scale;
   GLuint color_rb, depth_rb = 0;
   GLenum status;
 
@@ -335,8 +335,9 @@ gtk_gl_area_draw (GtkWidget *widget,
   if (!gtk_gl_area_make_current (self))
     return FALSE;
 
-  w = gtk_widget_get_allocated_width (widget);
-  h = gtk_widget_get_allocated_height (widget);
+  scale = gtk_widget_get_scale_factor (widget);
+  w = gtk_widget_get_allocated_width (widget) * scale;
+  h = gtk_widget_get_allocated_height (widget) * scale;
 
   glGenRenderbuffersEXT (1, &color_rb);
   glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, color_rb);
@@ -366,7 +367,7 @@ gtk_gl_area_draw (GtkWidget *widget,
 
       gdk_cairo_draw_gl_render_buffer (cr,
 				       gtk_widget_get_window (widget),
-				       color_rb, 0, 0, w, h);
+				       color_rb, scale, 0, 0, w, h);
 
       if (!gtk_gl_area_make_current (self))
 	g_error ("can't make old context current again");

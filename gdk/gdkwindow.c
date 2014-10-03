@@ -2696,6 +2696,7 @@ static void
 gdk_gl_blit_region (GdkWindow *window, cairo_region_t *region)
 {
   int n_rects, i;
+  int scale = gdk_window_get_scale_factor (window);
   int wh = gdk_window_get_height (window);
   cairo_rectangle_int_t rect;
 
@@ -2703,10 +2704,10 @@ gdk_gl_blit_region (GdkWindow *window, cairo_region_t *region)
   for (i = 0; i < n_rects; i++)
     {
       cairo_region_get_rectangle (region, i, &rect);
-      glScissor (rect.x, wh - rect.y - rect.height, rect.width, rect.height);
-      glBlitFramebuffer (rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
-			 rect.x, wh - rect.y - rect.height, rect.x + rect.width, wh - rect.y,
-			 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      glScissor (rect.x * scale, (wh - rect.y - rect.height) * scale, rect.width * scale, rect.height * scale);
+      glBlitFramebuffer (rect.x * scale, (wh - rect.y - rect.height) * scale, (rect.x + rect.width) * scale, (wh - rect.y) * scale,
+                         rect.x * scale, (wh - rect.y - rect.height) * scale, (rect.x + rect.width) * scale, (wh - rect.y) * scale,
+                         GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
 }
 
@@ -2821,8 +2822,8 @@ gdk_window_begin_paint_region (GdkWindow       *window,
   if (window->current_paint.use_gl)
     {
       GdkGLContext *context;
-      int ww = gdk_window_get_width (window);
-      int wh = gdk_window_get_height (window);
+      int ww = gdk_window_get_width (window) * gdk_window_get_scale_factor (window);
+      int wh = gdk_window_get_height (window) * gdk_window_get_scale_factor (window);
 
       context = gdk_window_get_paint_gl_context (window);
 

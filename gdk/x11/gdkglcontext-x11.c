@@ -336,7 +336,9 @@ gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
   int n_rects, i;
   GdkWindow *window;
   int window_height;
+  int window_scale;
   unsigned int texture_id;
+  double sx, sy;
 
   if (cairo_surface_get_type (surface) != CAIRO_SURFACE_TYPE_XLIB)
     return FALSE;
@@ -346,7 +348,13 @@ gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
     return FALSE;
 
   window = gdk_gl_context_get_window (gdk_gl_context_get_current ());
+  window_scale = gdk_window_get_scale_factor (window);
   window_height = gdk_window_get_height (window);
+
+  sx = sy = 1;
+#ifdef HAVE_CAIRO_SURFACE_SET_DEVICE_SCALE
+  cairo_surface_get_device_scale (window->current_paint.surface, &sx, &sy);
+#endif
 
   cairo_surface_get_device_offset (surface,
 				   &device_x_offset, &device_y_offset);
@@ -361,29 +369,32 @@ gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
   n_rects = cairo_region_num_rectangles (region);
   for (i = 0; i < n_rects; i++)
     {
-      int src_x, src_y;
+      int src_x, src_y, src_height, src_width;
+
       cairo_region_get_rectangle (region, i, &rect);
 
-      glScissor (rect.x, window_height - rect.y - rect.height,
-		 rect.width, rect.height);
+      glScissor (rect.x * window_scale, (window_height - rect.y - rect.height) * window_scale,
+		 rect.width * window_scale, rect.height * window_scale);
 
-      src_x = rect.x + device_x_offset;
-      src_y = rect.y + device_y_offset;
+      src_x = rect.x * sx + device_x_offset;
+      src_y = rect.y * sy + device_y_offset;
+      src_width = rect.width * sx;
+      src_height = rect.height * sy;
 
 #define FLIP_Y(_y) (window_height - (_y))
 
       glBegin (GL_QUADS);
-      glTexCoord2f (src_x, src_y + rect.height);
-      glVertex2f (rect.x, FLIP_Y(rect.y + rect.height));
+      glTexCoord2f (src_x, src_y + src_height);
+      glVertex2f (rect.x * window_scale, FLIP_Y(rect.y + rect.height) * window_scale);
 
-      glTexCoord2f (src_x + rect.width, src_y + rect.height);
-      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y + rect.height));
+      glTexCoord2f (src_x + src_width, src_y + src_height);
+      glVertex2f ((rect.x + rect.width) * window_scale, FLIP_Y(rect.y + rect.height) * window_scale);
 
-      glTexCoord2f (src_x + rect.width, src_y);
-      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y));
+      glTexCoord2f (src_x + src_width, src_y);
+      glVertex2f ((rect.x + rect.width) * window_scale, FLIP_Y(rect.y) * window_scale);
 
       glTexCoord2f (src_x, src_y);
-      glVertex2f (rect.x, FLIP_Y(rect.y));
+      glVertex2f (rect.x * window_scale, FLIP_Y(rect.y) * window_scale);
       glEnd();
     }
 

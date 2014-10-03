@@ -545,6 +545,7 @@ void
 gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 				 GdkWindow            *window,
 				 int                   render_buffer,
+                                 int                   buffer_scale,
 				 int                   x,
 				 int                   y,
 				 int                   width,
@@ -553,7 +554,7 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   GdkGLContext *context;
   cairo_surface_t *image;
   cairo_matrix_t matrix;
-  int dx, dy;
+  int dx, dy, window_scale;
   gboolean trivial_transform;
   cairo_surface_t *group_target;
   GdkWindow *direct_window, *impl_window;
@@ -561,6 +562,8 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   GLuint framebuffer;
 
   impl_window = window->impl_window;
+
+  window_scale = gdk_window_get_scale_factor (impl_window);
 
   context = gdk_window_get_paint_gl_context (window);
   if (context == NULL)
@@ -605,7 +608,7 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       window_height = gdk_window_get_height (impl_window);
       glDrawBuffer (GL_BACK);
 
-#define FLIP_Y(_y) (window_height - (_y))
+#define FLIP_Y(_y) (window_height*window_scale - (_y))
 
       for (i = 0; i < clip_rects->num_rectangles; i++)
 	{
@@ -615,33 +618,44 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 	  rect = &clip_rects->rectangles[i];
 	  /* Here we assume clip rects are ints for direct targets,
 	     which is true for cairo */
-	  clip_rect.x = (int)rect->x + dx;
-	  clip_rect.y = (int)rect->y + dy;
-	  clip_rect.width = (int)rect->width;
-	  clip_rect.height = (int)rect->height;
+	  clip_rect.x = (int)(rect->x + dx) * window_scale;
+	  clip_rect.y = (int)(rect->y + dy) * window_scale;
+	  clip_rect.width = (int)rect->width * window_scale;
+	  clip_rect.height = (int)rect->height * window_scale;
 
 	  glScissor (clip_rect.x, FLIP_Y (clip_rect.y + clip_rect.height),
 		     clip_rect.width, clip_rect.height);
 
-	  dest.x = dx;
-	  dest.y = dy;
-	  dest.width = width;
-	  dest.height = height;
+	  dest.x = dx * window_scale;
+	  dest.y = dy * window_scale;
+	  dest.width = width * window_scale / buffer_scale;
+	  dest.height = height * window_scale / buffer_scale;
 
 	  if (gdk_rectangle_intersect (&clip_rect, &dest, &dest))
 	    {
-	      int clipped_src_x = x + (dest.x - dx);
-	      int clipped_src_y = y  + height -dest.height - (dest.y - dy);
+	      int clipped_src_x = x + (dest.x - dx * window_scale);
+	      int clipped_src_y = y + (height - dest.height - (dest.y - dy * window_scale));
 	      glBlitFramebufferEXT(clipped_src_x, clipped_src_y,
-				   clipped_src_x + dest.width, clipped_src_y + dest.height,
-				   dest.x, FLIP_Y (dest.y + dest.height),
-				   dest.x + dest.width, FLIP_Y (dest.y),
+				   (clipped_src_x + dest.width), (clipped_src_y + dest.height),
+				   dest.x, FLIP_Y(dest.y + dest.height),
+				   dest.x + dest.width, FLIP_Y(dest.y),
 				   GL_COLOR_BUFFER_BIT, GL_NEAREST);
 	      if (impl_window->current_paint.flushed_region)
-		cairo_region_union_rectangle (impl_window->current_paint.flushed_region,
-					      &dest);
+                {
+                  cairo_rectangle_int_t flushed_rect;
+
+                  flushed_rect.x = dest.x / window_scale;
+                  flushed_rect.y = dest.y / window_scale;
+                  flushed_rect.width = (dest.x + dest.width + window_scale - 1) / window_scale - flushed_rect.x;
+                  flushed_rect.height = (dest.y + dest.height + window_scale - 1) / window_scale - flushed_rect.y;
+
+                  cairo_region_union_rectangle (impl_window->current_paint.flushed_region,
+                                                &flushed_rect);
+                }
 	    }
 	}
+#undef FLIP_Y
+
     }
   else
     {
@@ -652,6 +666,10 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       image = cairo_surface_create_similar_image (cairo_get_target (cr),
 						  CAIRO_FORMAT_ARGB32,
 						  width, height);
+#ifdef HAVE_CAIRO_SURFACE_SET_DEVICE_SCALE
+      cairo_surface_set_device_scale (image, buffer_scale, buffer_scale);
+#endif
+
       glPixelStorei (GL_PACK_ALIGNMENT, 4);
       glPixelStorei (GL_PACK_ROW_LENGTH, cairo_image_surface_get_stride (image) / 4);
 
@@ -664,14 +682,13 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 
       /* Invert due to opengl having different origin */
       cairo_scale (cr, 1, -1);
-      cairo_translate (cr, 0, -height);
+      cairo_translate (cr, 0, -height / buffer_scale);
 
       cairo_set_source_surface (cr, image, 0, 0);
       cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
       cairo_paint (cr);
 
       cairo_surface_destroy (image);
-
     }
 
   glDrawBuffer (GL_BACK);
@@ -695,6 +712,8 @@ gdk_gl_texture_from_surface (cairo_surface_t *surface,
   GdkWindow *window;
   int window_height;
   unsigned int texture_id;
+  int window_scale;
+  double sx, sy;
 
   current = gdk_gl_context_get_current ();
   if (current &&
@@ -705,7 +724,13 @@ gdk_gl_texture_from_surface (cairo_surface_t *surface,
   /* Software fallback */
 
   window = gdk_gl_context_get_window (gdk_gl_context_get_current ());
+  window_scale = gdk_window_get_scale_factor (window);
   window_height = gdk_window_get_height (window);
+
+  sx = sy = 1;
+#ifdef HAVE_CAIRO_SURFACE_SET_DEVICE_SCALE
+  cairo_surface_get_device_scale (window->current_paint.surface, &sx, &sy);
+#endif
 
   cairo_surface_get_device_offset (surface,
 				   &device_x_offset, &device_y_offset);
@@ -713,23 +738,27 @@ gdk_gl_texture_from_surface (cairo_surface_t *surface,
   glGenTextures (1, &texture_id);
   glBindTexture (GL_TEXTURE_RECTANGLE_ARB, texture_id);
   glEnable (GL_TEXTURE_RECTANGLE_ARB);
-  
+
   n_rects = cairo_region_num_rectangles (region);
   for (i = 0; i < n_rects; i++)
     {
       cairo_region_get_rectangle (region, i, &rect);
 
-      glScissor (rect.x, window_height - rect.y - rect.height,
-		 rect.width, rect.height);
+      glScissor (rect.x * window_scale, (window_height - rect.y - rect.height) * window_scale,
+		 rect.width * window_scale, rect.height * window_scale);
 
       e = rect;
+      e.x *= sx;
+      e.y *= sy;
       e.x += (int)device_x_offset;
       e.y += (int)device_y_offset;
+      e.width *= sx;
+      e.height *= sy;
       image = cairo_surface_map_to_image (surface, &e);
 
       glPixelStorei (GL_UNPACK_ALIGNMENT, 4);
       glPixelStorei (GL_UNPACK_ROW_LENGTH, cairo_image_surface_get_stride (image)/4);
-      glTexImage2D (GL_TEXTURE_RECTANGLE_ARB, 0, 4, rect.width, rect.height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+      glTexImage2D (GL_TEXTURE_RECTANGLE_ARB, 0, 4, e.width, e.height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
 		    cairo_image_surface_get_data (image));
       glPixelStorei (GL_UNPACK_ROW_LENGTH, 0);
 
@@ -738,17 +767,17 @@ gdk_gl_texture_from_surface (cairo_surface_t *surface,
 #define FLIP_Y(_y) (window_height - (_y))
 
       glBegin (GL_QUADS);
-      glTexCoord2f (0.0f, rect.height);
-      glVertex2f (rect.x, FLIP_Y(rect.y + rect.height));
+      glTexCoord2f (0.0f * sx, rect.height * sy);
+      glVertex2f (rect.x * window_scale, FLIP_Y(rect.y + rect.height) * window_scale);
 	  
-      glTexCoord2f (rect.width, rect.height);
-      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y + rect.height));
+      glTexCoord2f (rect.width * sx, rect.height * sy);
+      glVertex2f ((rect.x + rect.width) * window_scale, FLIP_Y(rect.y + rect.height) * window_scale);
 	  
-      glTexCoord2f (rect.width, 0.0f);
-      glVertex2f (rect.x + rect.width, FLIP_Y(rect.y));
+      glTexCoord2f (rect.width * sx, 0.0f * sy);
+      glVertex2f ((rect.x + rect.width) * window_scale, FLIP_Y(rect.y) * window_scale);
 	  
-      glTexCoord2f (0.0f, 0.0f);
-      glVertex2f (rect.x, FLIP_Y(rect.y));
+      glTexCoord2f (0.0f * sx, 0.0f * sy);
+      glVertex2f (rect.x * window_scale, FLIP_Y(rect.y) * window_scale);
       glEnd();
     }
 

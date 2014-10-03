@@ -74,6 +74,7 @@ GDK_AVAILABLE_IN_3_14
 void       gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 					    GdkWindow            *window,
 					    int                   render_buffer,
+                                            int                   buffer_scale,
 					    int                   x,
 					    int                   y,
 					    int                   width,
