@@ -239,8 +239,6 @@ gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
     glXGetVideoSyncSGI (&info->last_frame_counter);
 }
 
-static cairo_user_data_key_t glx_pixmap_key;
-
 typedef struct {
   Display *display;
   GLXDrawable drawable;
@@ -274,10 +272,6 @@ glx_pixmap_get (cairo_surface_t *surface)
     GLX_TEXTURE_FORMAT_EXT, GLX_TEXTURE_FORMAT_RGBA_EXT,
     None
   };
-
-  glx_pixmap = cairo_surface_get_user_data (surface, &glx_pixmap_key);
-  if (glx_pixmap != NULL)
-    return glx_pixmap;
 
   y_inverted = FALSE;
   fbconfigs = glXGetFBConfigs (display, XScreenNumberOfScreen (screen), &nfbconfigs);
@@ -328,14 +322,8 @@ glx_pixmap_get (cairo_surface_t *surface)
 					  cairo_xlib_surface_get_drawable (surface),
 					  pixmap_attributes);
 
-  cairo_surface_set_user_data (surface, &glx_pixmap_key,
-			       glx_pixmap,  glx_pixmap_destroy);
-
-  XSync (display, False);
-
   return glx_pixmap;
 }
-
 
 static gboolean
 gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
@@ -400,10 +388,12 @@ gdk_x11_gl_context_texture_from_surface (GdkGLContext *context,
     }
 
   glXReleaseTexImageEXT (glx_pixmap->display, glx_pixmap->drawable,
-			 GLX_FRONT_LEFT_EXT);
+  			 GLX_FRONT_LEFT_EXT);
 
   glDisable (GL_TEXTURE_RECTANGLE_ARB);
   glDeleteTextures (1, &texture_id);
+
+  glx_pixmap_destroy(glx_pixmap);
 
   return TRUE;
 }
