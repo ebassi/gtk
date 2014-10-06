@@ -3026,8 +3026,9 @@ gdk_window_end_paint (GdkWindow *window)
 	      g_error ("make current failed");
 	    }
 
-	  gdk_gl_texture_from_surface (window->current_paint.surface,
-				       opaque_region);
+          if (!cairo_region_is_empty (opaque_region))
+            gdk_gl_texture_from_surface (window->current_paint.surface,
+                                         opaque_region);
           if (!cairo_region_is_empty (window->current_paint.need_blend_region))
             {
               glEnable(GL_BLEND);
