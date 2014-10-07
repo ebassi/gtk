@@ -59,19 +59,59 @@ gdk_wayland_window_invalidate_for_new_frame (GdkWindow      *window,
                                              cairo_region_t *update_area)
 {
   cairo_rectangle_int_t window_rect;
+  GdkDisplay *display = gdk_window_get_display (window);
+  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (display);
+  GdkWaylandGLContext *context_wayland;
+  int buffer_age;
+  gboolean invalidate_all;
+  EGLSurface egl_surface;
 
   /* Minimal update is ok if we're not drawing with gl */
   if (window->gl_paint_context == NULL)
     return;
 
-  window_rect.x = 0;
-  window_rect.y = 0;
-  window_rect.width = gdk_window_get_width (window);
-  window_rect.height = gdk_window_get_height (window);
+  context_wayland = GDK_WAYLAND_GL_CONTEXT (window->gl_paint_context);
+  buffer_age = 0;
 
-  /* If nothing else is known, repaint everything so that the back
-     buffer is fully up-to-date for the swapbuffer */
-  cairo_region_union_rectangle (update_area, &window_rect);
+  egl_surface = gdk_wayland_window_get_egl_surface (window->impl_window,
+                                                    context_wayland->egl_config);
+
+  if (display_wayland->have_egl_buffer_age)
+    eglQuerySurface (display_wayland->egl_display, egl_surface,
+                     EGL_BUFFER_AGE_EXT, &buffer_age);
+
+  invalidate_all = FALSE;
+  if (buffer_age == 0 || buffer_age >= 4)
+    invalidate_all = TRUE;
+  else
+    {
+      if (buffer_age >= 2)
+        {
+          if (window->old_updated_area[0])
+            cairo_region_union (update_area, window->old_updated_area[0]);
+          else
+            invalidate_all = TRUE;
+        }
+      if (buffer_age >= 3)
+        {
+          if (window->old_updated_area[1])
+            cairo_region_union (update_area, window->old_updated_area[1]);
+          else
+            invalidate_all = TRUE;
+        }
+    }
+
+  if (invalidate_all)
+    {
+      window_rect.x = 0;
+      window_rect.y = 0;
+      window_rect.width = gdk_window_get_width (window);
+      window_rect.height = gdk_window_get_height (window);
+
+      /* If nothing else is known, repaint everything so that the back
+         buffer is fully up-to-date for the swapbuffer */
+      cairo_region_union_rectangle (update_area, &window_rect);
+    }
 }
 
 static void
@@ -137,6 +177,9 @@ gdk_wayland_display_init_gl (GdkDisplay *display)
 
   display_wayland->have_egl_khr_create_context =
     epoxy_has_egl_extension (dpy, "EGL_KHR_create_context");
+
+  display_wayland->have_egl_buffer_age =
+    epoxy_has_egl_extension (dpy, "EGL_EXT_buffer_age");
 
   GDK_NOTE (OPENGL,
             g_print ("EGL API version %d.%d found\n"

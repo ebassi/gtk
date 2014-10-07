@@ -129,19 +129,58 @@ gdk_x11_window_invalidate_for_new_frame (GdkWindow      *window,
                                          cairo_region_t *update_area)
 {
   cairo_rectangle_int_t window_rect;
+  GdkDisplay *display = gdk_window_get_display (window);
+  GdkX11Display *display_x11 = GDK_X11_DISPLAY (display);
+  Display *dpy = gdk_x11_display_get_xdisplay (display);
+  GdkX11GLContext *context_x11;
+  unsigned int buffer_age;
+  gboolean invalidate_all;
 
   /* Minimal update is ok if we're not drawing with gl */
   if (window->gl_paint_context == NULL)
     return;
 
-  window_rect.x = 0;
-  window_rect.y = 0;
-  window_rect.width = gdk_window_get_width (window);
-  window_rect.height = gdk_window_get_height (window);
+  context_x11 = GDK_X11_GL_CONTEXT (window->gl_paint_context);
 
-  /* If nothing else is known, repaint everything so that the back
-     buffer is fully up-to-date for the swapbuffer */
-  cairo_region_union_rectangle (update_area, &window_rect);
+  buffer_age = 0;
+
+  if (display_x11->has_glx_buffer_age)
+    glXQueryDrawable(dpy, context_x11->drawable,
+                     GLX_BACK_BUFFER_AGE_EXT, &buffer_age);
+
+  invalidate_all = FALSE;
+  if (buffer_age == 0 || buffer_age >= 4)
+    invalidate_all = TRUE;
+  else
+    {
+      if (buffer_age >= 2)
+        {
+          if (window->old_updated_area[0])
+            cairo_region_union (update_area, window->old_updated_area[0]);
+          else
+            invalidate_all = TRUE;
+        }
+      if (buffer_age >= 3)
+        {
+          if (window->old_updated_area[1])
+            cairo_region_union (update_area, window->old_updated_area[1]);
+          else
+            invalidate_all = TRUE;
+        }
+    }
+
+  if (invalidate_all)
+    {
+      window_rect.x = 0;
+      window_rect.y = 0;
+      window_rect.width = gdk_window_get_width (window);
+      window_rect.height = gdk_window_get_height (window);
+
+      /* If nothing else is known, repaint everything so that the back
+         buffer is fully up-to-date for the swapbuffer */
+      cairo_region_union_rectangle (update_area, &window_rect);
+    }
+
 }
 
 static void

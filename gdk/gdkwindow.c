@@ -188,6 +188,11 @@ static cairo_surface_t *gdk_window_ref_impl_surface (GdkWindow *window);
 static void gdk_window_set_frame_clock (GdkWindow      *window,
                                         GdkFrameClock  *clock);
 
+static void draw_ugly_color (GdkWindow       *window,
+                             const cairo_region_t *region,
+                             int color);
+
+
 static guint signals[LAST_SIGNAL] = { 0 };
 
 static gpointer parent_class = NULL;
@@ -1032,9 +1037,35 @@ recompute_visible_regions (GdkWindow *private,
 				      recalculate_children);
 }
 
+static void
+gdk_window_clear_old_updated_area (GdkWindow *window)
+{
+  int i;
+
+  for (i = 0; i < 2; i++)
+    {
+      if (window->old_updated_area[i])
+        {
+          cairo_region_destroy (window->old_updated_area[i]);
+          window->old_updated_area[i] = NULL;
+        }
+    }
+}
+
+static void
+gdk_window_append_old_updated_area (GdkWindow *window,
+                                    cairo_region_t *region)
+{
+  if (window->old_updated_area[1])
+    cairo_region_destroy (window->old_updated_area[1]);
+  window->old_updated_area[1] = window->old_updated_area[0];
+  window->old_updated_area[0] = cairo_region_reference (region);
+}
+
 void
 _gdk_window_update_size (GdkWindow *window)
 {
+  gdk_window_clear_old_updated_area (window);
   recompute_visible_regions (window, FALSE);
 }
 
@@ -3014,6 +3045,7 @@ gdk_window_end_paint (GdkWindow *window)
   if (impl_class->end_paint)
     impl_class->end_paint (window);
 
+
   if (window->current_paint.surface_needs_composite)
     {
       cairo_surface_t *surface;
@@ -3549,7 +3581,6 @@ gdk_window_update_native_shapes (GdkWindow *window)
     }
 }
 
-
 /* Process and remove any invalid area on the native window by creating
  * expose events for the window and all non-native descendants.
  */
@@ -3600,6 +3631,10 @@ gdk_window_process_updates_internal (GdkWindow *window)
 
 	  if (debug_updates)
 	    {
+              cairo_region_t *swap_region = cairo_region_copy (expose_region);
+              cairo_region_subtract (swap_region, window->active_update_area);
+              draw_ugly_color (window, swap_region, 1);
+
 	      /* Make sure we see the red invalid area before redrawing. */
 	      gdk_display_sync (gdk_window_get_display (window));
 	      g_usleep (70000);
@@ -3612,8 +3647,8 @@ gdk_window_process_updates_internal (GdkWindow *window)
 
           impl_class->process_updates_recurse (window, expose_region);
 
-	  cairo_region_destroy (expose_region);
-	}
+          gdk_window_append_old_updated_area (window, window->active_update_area);
+        }
 
       cairo_region_destroy (window->active_update_area);
       window->active_update_area = NULL;
@@ -3919,13 +3954,17 @@ gdk_window_set_invalidate_handler (GdkWindow                      *window,
 
 static void
 draw_ugly_color (GdkWindow       *window,
-		 const cairo_region_t *region)
+		 const cairo_region_t *region,
+                 int color)
 {
   cairo_t *cr;
 
   cr = gdk_cairo_create (window);
   /* Draw ugly color all over the newly-invalid region */
-  cairo_set_source_rgb (cr, 50000/65535., 10000/65535., 10000/65535.);
+  if (color == 0)
+    cairo_set_source_rgb (cr, 50000/65535., 10000/65535., 10000/65535.);
+  else
+    cairo_set_source_rgb (cr, 10000/65535., 50000/65535., 10000/65535.);
   gdk_cairo_region (cr, region);
   cairo_fill (cr);
 
@@ -4021,7 +4060,7 @@ gdk_window_invalidate_maybe_recurse_full (GdkWindow            *window,
   invalidate_impl_subwindows (window, region, child_func, user_data, 0, 0);
 
   if (debug_updates)
-    draw_ugly_color (window, visible_region);
+    draw_ugly_color (window, visible_region, 0);
 
   while (window != NULL && 
 	 !cairo_region_is_empty (visible_region))
@@ -5260,6 +5299,7 @@ gdk_window_hide (GdkWindow *window)
       impl_class->hide (window);
     }
 
+  gdk_window_clear_old_updated_area (window);
   recompute_visible_regions (window, FALSE);
 
   /* all decendants became non-visible, we need to send visibility notify */
@@ -5319,6 +5359,7 @@ gdk_window_withdraw (GdkWindow *window)
 	}
 
       recompute_visible_regions (window, FALSE);
+      gdk_window_clear_old_updated_area (window);
     }
 }
 

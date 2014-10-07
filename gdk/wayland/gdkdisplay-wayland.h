@@ -87,6 +87,7 @@ struct _GdkWaylandDisplay
 
   guint have_egl : 1;
   guint have_egl_khr_create_context : 1;
+  guint have_egl_buffer_age : 1;
 };
 
 struct _GdkWaylandDisplayClass

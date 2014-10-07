@@ -126,10 +126,11 @@ struct _GdkX11Display
   gint wm_moveresize_button;
 
   /* GLX information */
-  guint have_glx : 1;
   gint glx_version;
   gint glx_error_base;
   gint glx_event_base;
+
+  guint have_glx : 1;
 
   /* GLX extensions we check */
   guint has_glx_swap_interval : 1;
