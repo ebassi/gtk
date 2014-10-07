@@ -155,7 +155,6 @@
  */
 
 typedef struct {
-  GdkGLPixelFormat *pixel_format;
   GdkGLContext *context;
   GLuint framebuffer;
 } GtkGLAreaPrivate;
@@ -163,7 +162,6 @@ typedef struct {
 enum {
   PROP_0,
 
-  PROP_PIXEL_FORMAT,
   PROP_CONTEXT,
 
   LAST_PROP
@@ -173,7 +171,6 @@ static GParamSpec *obj_props[LAST_PROP] = { NULL, };
 
 enum {
   RENDER,
-  CREATE_CONTEXT,
 
   LAST_SIGNAL
 };
@@ -188,7 +185,6 @@ gtk_gl_area_dispose (GObject *gobject)
   GtkGLArea *self = GTK_GL_AREA (gobject);
   GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
 
-  g_clear_object (&priv->pixel_format);
   g_clear_object (&priv->context);
 
   G_OBJECT_CLASS (gtk_gl_area_parent_class)->dispose (gobject);
@@ -200,15 +196,8 @@ gtk_gl_area_set_property (GObject      *gobject,
                           const GValue *value,
                           GParamSpec   *pspec)
 {
-  GtkGLArea *self = GTK_GL_AREA (gobject);
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
-
   switch (prop_id)
     {
-    case PROP_PIXEL_FORMAT:
-      priv->pixel_format = g_value_dup_object (value);
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (gobject, prop_id, pspec);
     }
@@ -224,10 +213,6 @@ gtk_gl_area_get_property (GObject    *gobject,
 
   switch (prop_id)
     {
-    case PROP_PIXEL_FORMAT:
-      g_value_set_object (value, priv->pixel_format);
-      break;
-
     case PROP_CONTEXT:
       g_value_set_object (value, priv->context);
       break;
@@ -237,45 +222,22 @@ gtk_gl_area_get_property (GObject    *gobject,
     }
 }
 
-static GdkGLContext *
-gtk_gl_area_create_context (GtkGLArea *area)
-{
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
-  GdkGLContext *context;
-
-  if (priv->context != NULL)
-    return priv->context;
-
-  context = NULL;
-  g_signal_emit (area, area_signals[CREATE_CONTEXT], 0,
-                 priv->pixel_format,
-                 &context);
-
-  if (context == NULL)
-    {
-      g_critical ("No GL context was created for the widget");
-      return NULL;
-    }
-
-  priv->context = context;
-
-  return priv->context;
-}
-
 static void
 gtk_gl_area_realize (GtkWidget *widget)
 {
   GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private ((GtkGLArea *) widget);
-  GdkGLContext *context;
+  GdkWindow *window;
 
   GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->realize (widget);
-  
-  context = gtk_gl_area_create_context (GTK_GL_AREA (widget));
-  if (context != NULL)
-    {
-      gdk_gl_context_set_window (context, gdk_window_get_toplevel (gtk_widget_get_window (widget)));
 
-      if (gdk_gl_context_make_current (context))
+  window = gtk_widget_get_window (widget);
+  priv->context = gdk_window_create_shared_gl_context (window,
+                                                       GDK_GL_PROFILE_DEFAULT,
+                                                       gdk_window_get_paint_gl_context (window),
+                                                       NULL);
+  if (priv->context != NULL)
+    {
+      if (gdk_gl_context_make_current (priv->context))
 	{
 	  glGenFramebuffersEXT (1, &priv->framebuffer);
 	  glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, priv->framebuffer);
@@ -305,7 +267,7 @@ gtk_gl_area_unrealize (GtkWidget *widget)
       else
 	g_warning ("can't free framebuffer");
 
-      gdk_gl_context_set_window (priv->context, NULL);
+      gdk_gl_context_clear_current ();
     }
 
   GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->unrealize (widget);
@@ -345,7 +307,7 @@ gtk_gl_area_draw (GtkWidget *widget,
   glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
 				GL_RENDERBUFFER_EXT, color_rb);
 
-  if (gdk_gl_pixel_format_get_depth_size (priv->pixel_format) != 0)
+  if (1 /* use depth buffer */)
     {
       glGenRenderbuffersEXT (1, &depth_rb);
       glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, depth_rb);
@@ -395,54 +357,11 @@ gtk_gl_area_screen_changed (GtkWidget *widget,
   g_clear_object (&priv->context);
 }
 
-static GdkGLContext *
-gtk_gl_area_real_create_context (GtkGLArea        *area,
-                                 GdkGLPixelFormat *format)
-{
-  GdkDisplay *display = gtk_widget_get_display (GTK_WIDGET (area));
-  GdkGLContext *retval;
-  GdkWindow *window;
-  GError *error = NULL;
-
-  if (display == NULL)
-    display = gdk_display_get_default ();
-
-  /* TODO: This is a bit weird, we should not create e.g. a depth or stencil buffer
-     here, those all go in the fbo, we just need a context that can render to the
-     window back buffer. */
-  window = gtk_widget_get_window (GTK_WIDGET (area));
-  retval = gdk_display_create_shared_gl_context (display, format,
-						 gdk_window_get_paint_gl_context (window),
-						 &error);
-  if (error != NULL)
-    {
-      g_critical ("Unable to create a GdkGLContext: %s", error->message);
-      g_error_free (error);
-      return NULL;
-    }
-
-  return retval;
-}
-
-static gboolean
-create_context_accumulator (GSignalInvocationHint *ihint,
-                            GValue                *return_accu,
-                            const GValue          *handler_return,
-                            gpointer               data)
-{
-  g_value_copy (handler_return, return_accu);
-
-  /* stop after the first handler returning a valid object */
-  return g_value_get_object (handler_return) == NULL;
-}
-
 static void
 gtk_gl_area_class_init (GtkGLAreaClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
-
-  klass->create_context = gtk_gl_area_real_create_context;
 
   widget_class->screen_changed = gtk_gl_area_screen_changed;
   widget_class->realize = gtk_gl_area_realize;
@@ -451,27 +370,6 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
   widget_class->draw = gtk_gl_area_draw;
 
   gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_DRAWING_AREA);
-
-  /**
-   * GtkGLArea:pixel-format:
-   *
-   * The #GdkGLPixelFormat used for creating the #GdkGLContext
-   * to be used by the #GtkGLArea widget.
-   *
-   * If you want to query the effective pixel format used by
-   * the #GdkGLContext, you should get the #GtkGLArea:context and
-   * call gdk_gl_context_get_pixel_format().
-   *
-   * Since: 3.14
-   */
-  obj_props[PROP_PIXEL_FORMAT] =
-    g_param_spec_object ("pixel-format",
-                         P_("Pixel Format"),
-                         P_("The GDK pixel format for creating the GL context"),
-                         GDK_TYPE_GL_PIXEL_FORMAT,
-                         G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_STRINGS);
 
   /**
    * GtkGLArea:context:
@@ -497,39 +395,6 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
   gobject_class->dispose = gtk_gl_area_dispose;
 
   g_object_class_install_properties (gobject_class, LAST_PROP, obj_props);
-
-  /**
-   * GtkGLArea::create-context:
-   * @area: the #GtkGLArea that emitted the signal
-   * @format: the #GdkGLPixelFormat for the OpenGL context
-   *
-   * The ::create-context signal is emitted each time a #GtkGLArea needs
-   * to create a #GdkGLContext for the given pixel format.
-   *
-   * Widgets can change #GdkDisplay, #GdkScreen, or #GdkVisual; this
-   * implies that a valid pixel format for a specific #GdkDisplay may
-   * not be valid any more after a change in those objects.
-   *
-   * The #GtkGLArea widget will presently emit the ::create-context
-   * signal when:
-   *
-   *   - the #GtkWidget::screen-changed signal is emitted
-   *   - the #GtkWidget::realize signal is emitted
-   *
-   * Returns: (transfer full): a newly created #GdkGLContext; the
-   *   #GtkGLArea widget will take ownership of the returned value.
-   *
-   * Since: 3.14
-   */
-  area_signals[CREATE_CONTEXT] =
-    g_signal_new (I_("create-context"),
-                  G_TYPE_FROM_CLASS (gobject_class),
-                  G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (GtkGLAreaClass, create_context),
-                  create_context_accumulator, NULL,
-                  _gtk_marshal_OBJECT__OBJECT,
-                  GDK_TYPE_GL_CONTEXT, 1,
-                  GDK_TYPE_GL_PIXEL_FORMAT);
 
   /**
    * GtkGLArea::render:
@@ -567,43 +432,18 @@ gtk_gl_area_init (GtkGLArea *self)
 
 /**
  * gtk_gl_area_new:
- * @pixel_format: a #GdkGLPixelFormat
  *
- * Creates a new #GtkGLArea widget using the given @pixel_format to
- * configure a #GdkGLContext.
+ * Creates a new #GtkGLArea widget.
  *
  * Returns: (transfer full): the newly created #GtkGLArea
  *
  * Since: 3.14
  */
 GtkWidget *
-gtk_gl_area_new (GdkGLPixelFormat *pixel_format)
+gtk_gl_area_new (void)
 {
-  g_return_val_if_fail (GDK_IS_GL_PIXEL_FORMAT (pixel_format), NULL);
-
   return g_object_new (GTK_TYPE_GL_AREA,
-                       "pixel-format", pixel_format,
                        NULL);
-}
-
-/**
- * gtk_gl_area_get_pixel_format:
- * @area: a #GtkGLArea
- *
- * Retrieves the #GdkGLPixelFormat used by @area.
- *
- * Returns: (transfer none): the #GdkGLPixelFormat
- *
- * Since: 3.14
- */
-GdkGLPixelFormat *
-gtk_gl_area_get_pixel_format (GtkGLArea *area)
-{
-  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
-
-  g_return_val_if_fail (GTK_IS_GL_AREA (area), NULL);
-
-  return priv->pixel_format;
 }
 
 /**
@@ -655,8 +495,6 @@ gtk_gl_area_make_current (GtkGLArea *area)
 
   if (priv->context == NULL)
     return FALSE;
-
-  gdk_gl_context_set_window (priv->context, gtk_widget_get_window (widget));
 
   return gdk_gl_context_make_current (priv->context);
 }

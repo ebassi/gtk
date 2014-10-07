@@ -2677,19 +2677,34 @@ GdkGLContext *
 gdk_window_get_paint_gl_context (GdkWindow *window)
 {
   if (window->impl_window->gl_paint_context == NULL)
-    {
-      GdkGLPixelFormat *pixel_format;
-
-      /* TODO: Should we set alpha-size to 8 here for e.g. csd windows? */
-      pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE, NULL);
-      window->impl_window->gl_paint_context = gdk_display_create_gl_context (gdk_window_get_display (window),
-								      pixel_format, NULL);
-      if (window->impl_window->gl_paint_context)
-	gdk_gl_context_set_window (window->impl_window->gl_paint_context, window);
-      g_object_unref (pixel_format);
-    }
+    window->impl_window->gl_paint_context =
+      gdk_window_create_gl_context (window, GDK_GL_PROFILE_DEFAULT, NULL);
 
   return window->impl_window->gl_paint_context;
+}
+
+GdkGLContext *
+gdk_window_create_gl_context (GdkWindow    *window,
+                              GdkGLProfile  profile,
+                              GError      **error)
+{
+  return gdk_window_create_shared_gl_context (window, profile, NULL, error);
+}
+
+GdkGLContext *
+gdk_window_create_shared_gl_context (GdkWindow    *window,
+                                     GdkGLProfile  profile,
+                                     GdkGLContext *shared_context,
+                                     GError      **error)
+{
+  g_return_val_if_fail (GDK_IS_WINDOW (window), NULL);
+  g_return_val_if_fail (GDK_IS_GL_CONTEXT (shared_context) || shared_context == NULL, NULL);
+  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+  return GDK_WINDOW_IMPL_GET_CLASS (window->impl)->create_gl_context (window,
+                                                                      profile,
+                                                                      shared_context,
+                                                                      error);
 }
 
 static void
@@ -2829,7 +2844,7 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 
       if (context == NULL || !gdk_gl_context_make_current (context))
 	{
-	  g_warning ("gl rendering failed");
+	  g_warning ("gl rendering failed, context: %p", context);
 	  window->current_paint.use_gl = FALSE;
 	}
       else

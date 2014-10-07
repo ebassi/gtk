@@ -685,7 +685,7 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       cairo_translate (cr, 0, -height / buffer_scale);
 
       cairo_set_source_surface (cr, image, 0, 0);
-      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
       cairo_paint (cr);
 
       cairo_surface_destroy (image);

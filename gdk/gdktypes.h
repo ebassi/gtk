@@ -128,7 +128,6 @@ typedef struct _GdkWindow             GdkWindow;
 typedef struct _GdkKeymap             GdkKeymap;
 typedef struct _GdkAppLaunchContext   GdkAppLaunchContext;
 
-typedef struct _GdkGLPixelFormat      GdkGLPixelFormat;
 typedef struct _GdkGLContext          GdkGLContext;
 
 /**
@@ -433,23 +432,23 @@ struct _GdkPoint
 };
 
 /**
- * GdkGLPixelFormatProfile:
- * @GDK_GL_PIXEL_FORMAT_PROFILE_DEFAULT: ...
- * @GDK_GL_PIXEL_FORMAT_PROFILE_LEGACY: ...
- * @GDK_GL_PIXEL_FORMAT_PROFILE_3_2_CORE: ...
+ * GdkGLProfile:
+ * @GDK_GL_PROFILE_DEFAULT: ...
+ * @GDK_GL_PROFILE_LEGACY: ...
+ * @GDK_GL_PROFILE_3_2_CORE: ...
  *
  * ...
  */
 typedef enum {
-  GDK_GL_PIXEL_FORMAT_PROFILE_DEFAULT,
-  GDK_GL_PIXEL_FORMAT_PROFILE_LEGACY,
-  GDK_GL_PIXEL_FORMAT_PROFILE_3_2_CORE
-} GdkGLPixelFormatProfile;
+  GDK_GL_PROFILE_DEFAULT,
+  GDK_GL_PROFILE_LEGACY,
+  GDK_GL_PROFILE_3_2_CORE
+} GdkGLProfile;
 
 typedef enum {
-  GDK_GL_PIXEL_FORMAT_ERROR_INVALID_FORMAT,
-  GDK_GL_PIXEL_FORMAT_ERROR_NOT_AVAILABLE
-} GdkGLPixelFormatError;
+  GDK_GL_ERROR_INVALID_FORMAT,
+  GDK_GL_ERROR_NOT_AVAILABLE
+} GdkGLError;
 
 G_END_DECLS
 

@@ -225,19 +225,10 @@ struct _GdkDisplayClass
   gchar *                (*utf8_to_string_target)      (GdkDisplay     *display,
                                                         const gchar    *text);
 
-  GdkGLContext *        (*create_gl_context)        (GdkDisplay        *display,
-                                                     GdkGLPixelFormat  *format,
-                                                     GdkGLContext      *share,
-                                                     GError           **error);
   gboolean              (*make_gl_context_current)  (GdkDisplay        *display,
-                                                     GdkGLContext      *context,
-                                                     GdkWindow         *drawable);
+                                                     GdkGLContext      *context);
   void                  (*destroy_gl_context)       (GdkDisplay        *display,
                                                      GdkGLContext      *context);
-  gboolean              (*validate_gl_pixel_format) (GdkDisplay        *display,
-                                                     GdkGLPixelFormat  *format,
-                                                     GdkGLPixelFormat **valid_format,
-                                                     GError           **error);
 
   /* Signals */
   void                   (*opened)                     (GdkDisplay     *display);
@@ -317,15 +308,10 @@ void                _gdk_display_create_window_impl   (GdkDisplay       *display
                                                        gint              attributes_mask);
 GdkWindow *         _gdk_display_create_window        (GdkDisplay       *display);
 
-gboolean            gdk_display_validate_gl_pixel_format (GdkDisplay        *display,
-                                                          GdkGLPixelFormat  *format,
-                                                          GdkGLPixelFormat **validated_format,
-                                                          GError           **error);
 void                gdk_display_destroy_gl_context       (GdkDisplay        *display,
                                                           GdkGLContext      *context);
 gboolean            gdk_display_make_gl_context_current  (GdkDisplay        *display,
-                                                          GdkGLContext      *context,
-                                                          GdkWindow         *window);
+                                                          GdkGLContext      *context);
 GdkGLContext *      gdk_display_get_current_gl_context   (GdkDisplay        *display);
 
 G_END_DECLS

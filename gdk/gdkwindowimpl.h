@@ -292,6 +292,10 @@ struct _GdkWindowImplClass
                                            gint            bottom);
   gboolean     (* show_window_menu)       (GdkWindow      *window,
                                            GdkEvent       *event);
+  GdkGLContext *(*create_gl_context)      (GdkWindow      *window,
+                                           GdkGLProfile    profile,
+                                           GdkGLContext   *share,
+                                           GError        **error);
 };
 
 /* Interface Functions */

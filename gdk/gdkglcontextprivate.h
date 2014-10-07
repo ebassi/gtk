@@ -40,10 +40,7 @@ struct _GdkGLContextClass
 {
   GObjectClass parent_class;
 
-  void (* set_window)      (GdkGLContext *context,
-                            GdkWindow    *window);
-  void (* update)          (GdkGLContext *context,
-                            GdkWindow    *window);
+  void (* update)          (GdkGLContext *context);
   void (* flush_buffer)    (GdkGLContext *context);
   gboolean (* texture_from_surface) (GdkGLContext    *context,
 				     cairo_surface_t *surface,

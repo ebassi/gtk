@@ -28,9 +28,7 @@
 #include <epoxy/glx.h>
 
 #include "gdkglcontextprivate.h"
-#include "gdkglpixelformatprivate.h"
 #include "gdkdisplayprivate.h"
-#include "gdkglpixelformat.h"
 #include "gdkvisual.h"
 #include "gdkwindow.h"
 #include "gdkinternals.h"
@@ -44,11 +42,7 @@ struct _GdkX11GLContext
 
   GLXContext glx_context;
   GLXFBConfig glx_config;
-
-  GLXDrawable current_drawable;
-
-  Window dummy_drawable;
-  GLXWindow dummy_glx_drawable;
+  GLXDrawable drawable;
 
   guint is_direct : 1;
   guint do_frame_sync : 1;
@@ -61,19 +55,14 @@ struct _GdkX11GLContextClass
 };
 
 gboolean        gdk_x11_display_init_gl                         (GdkDisplay        *display);
-gboolean        gdk_x11_display_validate_gl_pixel_format        (GdkDisplay        *display,
-                                                                 GdkGLPixelFormat  *format,
-                                                                 GdkGLPixelFormat **validated_format,
-                                                                 GError           **error);
-GdkGLContext *  gdk_x11_display_create_gl_context               (GdkDisplay        *display,
-                                                                 GdkGLPixelFormat  *format,
+GdkGLContext *  gdk_x11_window_create_gl_context                (GdkWindow         *window,
+                                                                 GdkGLProfile       profile,
                                                                  GdkGLContext      *share,
                                                                  GError           **error);
 void            gdk_x11_display_destroy_gl_context              (GdkDisplay        *display,
                                                                  GdkGLContext      *context);
 gboolean        gdk_x11_display_make_gl_context_current         (GdkDisplay        *display,
-                                                                 GdkGLContext      *context,
-                                                                 GdkWindow         *window);
+                                                                 GdkGLContext      *context);
 
 G_END_DECLS
 

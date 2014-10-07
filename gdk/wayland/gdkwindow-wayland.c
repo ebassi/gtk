@@ -26,6 +26,7 @@
 #include "gdkwindow.h"
 #include "gdkwindowimpl.h"
 #include "gdkdisplay-wayland.h"
+#include "gdkglcontext-wayland.h"
 #include "gdkframeclockprivate.h"
 #include "gdkprivate-wayland.h"
 #include "gdkinternals.h"
@@ -2155,6 +2156,7 @@ _gdk_window_impl_wayland_class_init (GdkWindowImplWaylandClass *klass)
   impl_class->set_opaque_region = gdk_wayland_window_set_opaque_region;
   impl_class->set_shadow_width = gdk_wayland_window_set_shadow_width;
   impl_class->show_window_menu = gdk_wayland_window_show_window_menu;
+  impl_class->create_gl_context = gdk_wayland_window_create_gl_context;
 }
 
 void

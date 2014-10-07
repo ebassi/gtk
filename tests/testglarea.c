@@ -49,36 +49,6 @@ render (GtkGLArea    *area,
 }
 
 static void
-init (GtkWidget *widget)
-{
-  GdkGLContext *context = gtk_gl_area_get_context (GTK_GL_AREA (widget));
-  GdkGLPixelFormat *format = gdk_gl_context_get_pixel_format (context);
-
-  g_print ("GL Pixel format:\n"
-           " - double-buffer: %s\n"
-           " - multi-sample: %s\n"
-           " - stereo: %s\n"
-           " - color-size: %d, alpha-size: %d\n"
-           " - depth-size: %d\n"
-           " - stencil-size: %d\n"
-           " - aux-buffers: %d\n"
-           " - accum-size: %d\n"
-           " - sample-buffers: %d\n"
-           " - samples: %d\n\n",
-           gdk_gl_pixel_format_get_double_buffer (format) ? "yes" : "no",
-           gdk_gl_pixel_format_get_multi_sample (format) ? "yes" : "no",
-           gdk_gl_pixel_format_get_stereo (format) ? "yes" : "no",
-           gdk_gl_pixel_format_get_color_size (format),
-           gdk_gl_pixel_format_get_alpha_size (format),
-           gdk_gl_pixel_format_get_depth_size (format),
-           gdk_gl_pixel_format_get_stencil_size (format),
-           gdk_gl_pixel_format_get_aux_buffers (format),
-           gdk_gl_pixel_format_get_accum_size (format),
-           gdk_gl_pixel_format_get_sample_buffers (format),
-           gdk_gl_pixel_format_get_samples (format));
-}
-
-static void
 on_axis_value_change (GtkAdjustment *adjustment,
                       gpointer       data)
 {
@@ -141,7 +111,6 @@ int
 main (int argc, char *argv[])
 {
   GtkWidget *window, *box, *button, *controls;
-  GdkGLPixelFormat *pixel_format;
   int i;
 
   gtk_init (&argc, &argv);
@@ -149,8 +118,6 @@ main (int argc, char *argv[])
   /* create a new pixel format; we use this to configure the
    * GL context, and to check for features
    */
-  pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE,
-                                          NULL);
 
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title (GTK_WINDOW (window), "GtkGLArea - Golden Triangle");
@@ -163,14 +130,12 @@ main (int argc, char *argv[])
   gtk_container_add (GTK_CONTAINER (window), box);
   gtk_widget_show (box);
 
-  gl_area = gtk_gl_area_new (pixel_format);
+  gl_area = gtk_gl_area_new ();
   gtk_widget_set_hexpand (gl_area, TRUE);
   gtk_widget_set_vexpand (gl_area, TRUE);
   gtk_container_add (GTK_CONTAINER (box), gl_area);
-  g_signal_connect (gl_area, "realize", G_CALLBACK (init), NULL);
   g_signal_connect (gl_area, "render", G_CALLBACK (render), NULL);
   gtk_widget_show (gl_area);
-  g_object_unref (pixel_format);
 
   controls = gtk_box_new (GTK_ORIENTATION_VERTICAL, FALSE);
   gtk_container_add (GTK_CONTAINER (box), controls);

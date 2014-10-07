@@ -71,17 +71,10 @@ static gboolean gtk_gears_tick          (GtkWidget     *widget,
 GtkWidget *
 gtk_gears_new ()
 {
-  GdkGLPixelFormat *pixel_format;
   GtkWidget *gears;
 
-  pixel_format = gdk_gl_pixel_format_new ("double-buffer", TRUE,
-                                          NULL);
-
   gears = g_object_new (gtk_gears_get_type (),
-                        "pixel-format", pixel_format,
                         NULL);
-
-  g_object_unref (pixel_format);
 
   return gears;
 }

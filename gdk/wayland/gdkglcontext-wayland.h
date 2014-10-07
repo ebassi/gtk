@@ -23,9 +23,7 @@
 #define __GDK_WAYLAND_GL_CONTEXT__
 
 #include "gdkglcontextprivate.h"
-#include "gdkglpixelformatprivate.h"
 #include "gdkdisplayprivate.h"
-#include "gdkglpixelformat.h"
 #include "gdkvisual.h"
 #include "gdkwindow.h"
 #include "gdkinternals.h"
@@ -49,19 +47,14 @@ struct _GdkWaylandGLContextClass
 };
 
 gboolean        gdk_wayland_display_init_gl                         (GdkDisplay        *display);
-gboolean        gdk_wayland_display_validate_gl_pixel_format        (GdkDisplay        *display,
-                                                                     GdkGLPixelFormat  *format,
-                                                                     GdkGLPixelFormat **validated_format,
-                                                                     GError           **error);
-GdkGLContext *  gdk_wayland_display_create_gl_context               (GdkDisplay        *display,
-                                                                     GdkGLPixelFormat  *format,
+GdkGLContext *  gdk_wayland_window_create_gl_context                (GdkWindow         *window,
+                                                                     GdkGLProfile       profile,
                                                                      GdkGLContext      *share,
                                                                      GError           **error);
 void            gdk_wayland_display_destroy_gl_context              (GdkDisplay        *display,
                                                                      GdkGLContext      *context);
 gboolean        gdk_wayland_display_make_gl_context_current         (GdkDisplay        *display,
-                                                                     GdkGLContext      *context,
-                                                                     GdkWindow         *window);
+                                                                     GdkGLContext      *context);
 
 G_END_DECLS
 

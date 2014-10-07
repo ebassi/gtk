@@ -127,15 +127,12 @@
 
 #include "gdkglcontextprivate.h"
 #include "gdkdisplayprivate.h"
-#include "gdkglpixelformat.h"
 #include "gdkvisual.h"
 #include "gdkinternals.h"
 
 #include "gdkintl.h"
 
 typedef struct {
-  GdkDisplay *display;
-  GdkGLPixelFormat *pixel_format;
   GdkWindow *window;
   GdkVisual *visual;
 
@@ -145,8 +142,6 @@ typedef struct {
 enum {
   PROP_0,
 
-  PROP_DISPLAY,
-  PROP_PIXEL_FORMAT,
   PROP_WINDOW,
   PROP_VISUAL,
 
@@ -157,6 +152,8 @@ enum {
 
 static GParamSpec *obj_pspecs[LAST_PROP] = { NULL, };
 
+G_DEFINE_QUARK (gdk-gl-error-quark, gdk_gl_error)
+
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GdkGLContext, gdk_gl_context, G_TYPE_OBJECT)
 
 static void
@@ -165,10 +162,8 @@ gdk_gl_context_dispose (GObject *gobject)
   GdkGLContext *context = GDK_GL_CONTEXT (gobject);
   GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
 
-  gdk_display_destroy_gl_context (priv->display, context);
+  gdk_display_destroy_gl_context (gdk_window_get_display (priv->window), context);
 
-  g_clear_object (&priv->display);
-  g_clear_object (&priv->pixel_format);
   g_clear_object (&priv->window);
   g_clear_object (&priv->visual);
 
@@ -185,20 +180,17 @@ gdk_gl_context_set_property (GObject      *gobject,
 
   switch (prop_id)
     {
-    case PROP_DISPLAY:
-      priv->display = g_object_ref (g_value_get_object (value));
-      break;
-
-    case PROP_PIXEL_FORMAT:
-      priv->pixel_format = g_object_ref (g_value_get_object (value));
-      break;
-
     case PROP_WINDOW:
       {
-        GdkGLContext *context = GDK_GL_CONTEXT (gobject);
         GdkWindow *window = g_value_get_object (value);
 
-        gdk_gl_context_set_window (context, window);
+        if (window)
+          g_object_ref (window);
+
+        if (priv->window)
+          g_object_unref (priv->window);
+
+        priv->window = window;
       }
       break;
 
@@ -230,14 +222,6 @@ gdk_gl_context_get_property (GObject    *gobject,
 
   switch (prop_id)
     {
-    case PROP_DISPLAY:
-      g_value_set_object (value, priv->display);
-      break;
-
-    case PROP_PIXEL_FORMAT:
-      g_value_set_object (value, priv->pixel_format);
-      break;
-
     case PROP_WINDOW:
       g_value_set_object (value, priv->window);
       break;
@@ -261,59 +245,25 @@ gdk_gl_context_class_init (GdkGLContextClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   /**
-   * GdkGLContext:display:
-   *
-   * The #GdkDisplay used by the context.
-   *
-   * Since: 3.14
-   */
-  obj_pspecs[PROP_DISPLAY] =
-    g_param_spec_object ("display",
-                         "Display",
-                         "The GDK display used by the GL context",
-                         GDK_TYPE_DISPLAY,
-                         G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_STRINGS);
-
-  /**
-   * GdkGLContext:pixel-format:
-   *
-   * The #GdkGLPixelFormat used to create the context.
-   *
-   * Since: 3.14
-   */
-  obj_pspecs[PROP_PIXEL_FORMAT] =
-    g_param_spec_object ("pixel-format",
-                         "Pixel Format",
-                         "The GDK pixel format used by the GL context",
-                         GDK_TYPE_GL_PIXEL_FORMAT,
-                         G_PARAM_READWRITE |
-                         G_PARAM_CONSTRUCT_ONLY |
-                         G_PARAM_STATIC_STRINGS);
-
-  /**
    * GdkGLContext:window:
    *
-   * The #GdkWindow currently bound to the context.
-   *
-   * You typically need to bind a #GdkWindow to a #GdkGLContext prior
-   * to calling gdk_gl_context_make_current().
+   * The #GdkWindow the gl context is bound to the context.
    *
    * Since: 3.14
    */
   obj_pspecs[PROP_WINDOW] =
     g_param_spec_object ("window",
                          P_("Window"),
-                         P_("The GDK window currently bound to the GL context"),
+                         P_("The GDK window bound to the GL context"),
                          GDK_TYPE_WINDOW,
                          G_PARAM_READWRITE |
+                         G_PARAM_CONSTRUCT_ONLY |
                          G_PARAM_STATIC_STRINGS);
 
   /**
    * GdkGLContext:visual:
    *
-   * The #GdkVisual matching the #GdkGLPixelFormat used by the context.
+   * The #GdkVisual matching the pixel format used by the context.
    *
    * Since: 3.14
    */
@@ -360,46 +310,6 @@ gdk_gl_context_init (GdkGLContext *self)
   GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (self);
 
   priv->swap_interval = TRUE;
-}
-
-/**
- * gdk_gl_context_get_display:
- * @context: a #GdkGLContext
- *
- * Retrieves the #GdkDisplay associated with the @context.
- *
- * Returns: (transfer none): the #GdkDisplay
- *
- * Since: 3.14
- */
-GdkDisplay *
-gdk_gl_context_get_display (GdkGLContext *context)
-{
-  GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
-
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
-
-  return priv->display;
-}
-
-/**
- * gdk_gl_context_get_pixel_format:
- * @context: a #GdkGLContext
- *
- * Retrieves the #GdkGLPixelFormat associated with the @context.
- *
- * Returns: (transfer none): the #GdkDisplay
- *
- * Since: 3.14
- */
-GdkGLPixelFormat *
-gdk_gl_context_get_pixel_format (GdkGLContext *context)
-{
-  GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
-
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
-
-  return priv->pixel_format;
 }
 
 /**
@@ -466,44 +376,7 @@ gdk_gl_context_make_current (GdkGLContext *context)
 
   g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), FALSE);
 
-  return gdk_display_make_gl_context_current (priv->display, context, priv->window);
-}
-
-/**
- * gdk_gl_context_set_window:
- * @context: a #GdkGLContext
- * @window: (optional): a #GdkWindow, or %NULL
- *
- * Sets the #GdkWindow used to display the draw commands.
- *
- * If @window is %NULL, the @context is detached from the window.
- *
- * Since: 3.14
- */
-void
-gdk_gl_context_set_window (GdkGLContext *context,
-                           GdkWindow    *window)
-{
-  GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
-
-  g_return_if_fail (GDK_IS_GL_CONTEXT (context));
-  g_return_if_fail (window == NULL || (GDK_IS_WINDOW (window) && !GDK_WINDOW_DESTROYED (window)));
-
-  if (priv->window == window)
-    return;
-
-  if (priv->window != NULL)
-    gdk_window_set_gl_context (priv->window, NULL);
-
-  g_clear_object (&priv->window);
-
-  if (window != NULL)
-    {
-      priv->window = g_object_ref (window);
-      gdk_window_set_gl_context (window, context);
-    }
-
-  GDK_GL_CONTEXT_GET_CLASS (context)->set_window (context, window);
+  return gdk_display_make_gl_context_current (gdk_window_get_display (priv->window), context);
 }
 
 /**
@@ -541,14 +414,9 @@ gdk_gl_context_get_window (GdkGLContext *context)
 void
 gdk_gl_context_update (GdkGLContext *context)
 {
-  GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
-
   g_return_if_fail (GDK_IS_GL_CONTEXT (context));
 
-  if (priv->window == NULL)
-    return;
-
-  GDK_GL_CONTEXT_GET_CLASS (context)->update (context, priv->window);
+  GDK_GL_CONTEXT_GET_CLASS (context)->update (context);
 }
 
 /**
@@ -566,7 +434,7 @@ gdk_gl_context_clear_current (void)
 {
   GdkDisplay *display = gdk_display_get_default ();
 
-  gdk_display_make_gl_context_current (display, NULL, NULL);
+  gdk_display_make_gl_context_current (display, NULL);
 }
 
 /**
@@ -600,49 +468,4 @@ gdk_gl_context_get_swap_interval (GdkGLContext *context)
   GdkGLContextPrivate *priv = gdk_gl_context_get_instance_private (context);
 
   return priv->swap_interval;
-}
-
-/*< private >
- * gdk_window_has_gl_context:
- * @window: a #GdkWindow
- *
- * Checks whether a #GdkWindow has a #GdkGLContext associated to it.
- *
- * Returns: %TRUE if the window has a GL context
- */
-gboolean
-gdk_window_has_gl_context (GdkWindow *window)
-{
-  return g_object_get_data (G_OBJECT (window), "-gdk-gl-context") != NULL;
-}
-
-/*< private >
- * gdk_window_set_gl_context:
- * @window: a #GdkWindow
- * @context: a #GdkGLContext
- *
- * Sets a back pointer to a #GdkGLContext on @window.
- *
- * This function should only be called by gdk_gl_context_set_window().
- */
-void
-gdk_window_set_gl_context (GdkWindow    *window,
-                           GdkGLContext *context)
-{
-  g_object_set_data (G_OBJECT (window), "-gdk-gl-context", context);
-}
-
-/*< private >
- * gdk_window_get_gl_context:
- * @window: a #GdkWindow
- *
- * Retrieves a pointer to the #GdkGLContext associated to
- * the @window.
- *
- * Returns: (transfer none): a #GdkGLContext, or %NULL
- */
-GdkGLContext *
-gdk_window_get_gl_context (GdkWindow *window)
-{
-  return g_object_get_data (G_OBJECT (window), "-gdk-gl-context");
 }

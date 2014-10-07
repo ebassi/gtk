@@ -67,9 +67,6 @@ struct _GtkGLAreaClass
   GtkWidgetClass parent_class;
 
   /*< public >*/
-  GdkGLContext * (* create_context) (GtkGLArea        *area,
-                                     GdkGLPixelFormat *format);
-
   gboolean       (* render)         (GtkGLArea        *area,
                                      GdkGLContext     *context);
 
@@ -81,7 +78,7 @@ GDK_AVAILABLE_IN_3_14
 GType gtk_gl_area_get_type (void) G_GNUC_CONST;
 
 GDK_AVAILABLE_IN_3_14
-GtkWidget *     gtk_gl_area_new                 (GdkGLPixelFormat *format);
+GtkWidget *     gtk_gl_area_new                 (void);
 
 GDK_AVAILABLE_IN_3_14
 GdkGLContext *  gtk_gl_area_get_context         (GtkGLArea        *area);
