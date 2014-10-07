@@ -49,7 +49,6 @@ struct _GdkGLContextClass
 				     cairo_region_t  *region);
 };
 
-gboolean        gdk_gl_context_get_swap_interval  (GdkGLContext *context);
 void            gdk_gl_context_flush_buffer       (GdkGLContext *context,
                                                    cairo_region_t *painted,
                                                    cairo_region_t *damage);

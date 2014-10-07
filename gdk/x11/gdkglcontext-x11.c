@@ -819,7 +819,7 @@ gdk_x11_display_make_gl_context_current (GdkDisplay   *display,
   // happens later anyway, and its up to the compositor to sync that
   // to the vblank.
   screen = gdk_window_get_screen (window);
-  do_frame_sync = ! gdk_screen_is_composited (screen) && gdk_gl_context_get_swap_interval (context);
+  do_frame_sync = ! gdk_screen_is_composited (screen);
 
   context_x11->do_frame_sync = do_frame_sync;
 
