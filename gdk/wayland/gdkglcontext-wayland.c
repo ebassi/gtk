@@ -132,7 +132,26 @@ gdk_wayland_gl_context_flush_buffer (GdkGLContext *context,
                                                     context_wayland->egl_config);
 
   // TODO: Use eglSwapBuffersWithDamageEXT if available
-  eglSwapBuffers (display_wayland->egl_display, egl_surface);
+  if (display_wayland->have_egl_swap_buffers_with_damage)
+    {
+      int i, j, n_rects = cairo_region_num_rectangles (damage);
+      EGLint *rects = g_new (EGLint, n_rects * 4);
+      cairo_rectangle_int_t rect;
+      int window_height = gdk_window_get_height (window);
+
+      for (i = 0, j = 0; i < n_rects; i++)
+        {
+          cairo_region_get_rectangle (damage, i, &rect);
+          rects[j++] = rect.x;
+          rects[j++] = window_height - rect.height - rect.y;
+          rects[j++] = rect.width;
+          rects[j++] = rect.height;
+        }
+      eglSwapBuffersWithDamageEXT (display_wayland->egl_display, egl_surface, rects, n_rects);
+      g_free (rects);
+    }
+  else
+    eglSwapBuffers (display_wayland->egl_display, egl_surface);
 }
 
 static void
@@ -180,6 +199,9 @@ gdk_wayland_display_init_gl (GdkDisplay *display)
 
   display_wayland->have_egl_buffer_age =
     epoxy_has_egl_extension (dpy, "EGL_EXT_buffer_age");
+
+  display_wayland->have_egl_swap_buffers_with_damage =
+    epoxy_has_egl_extension (dpy, "EGL_EXT_swap_buffers_with_damage");
 
   GDK_NOTE (OPENGL,
             g_print ("EGL API version %d.%d found\n"
