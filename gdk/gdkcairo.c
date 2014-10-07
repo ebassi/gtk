@@ -605,6 +605,8 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       int window_height;
       int i;
 
+      glEnable (GL_SCISSOR_TEST);
+
       window_height = gdk_window_get_height (impl_window);
       glDrawBuffer (GL_BACK);
 
@@ -654,6 +656,9 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
                 }
 	    }
 	}
+
+      glDisable (GL_SCISSOR_TEST);
+
 #undef FLIP_Y
 
     }

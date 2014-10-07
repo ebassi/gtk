@@ -41,13 +41,18 @@ struct _GdkGLContextClass
   GObjectClass parent_class;
 
   void (* update)          (GdkGLContext *context);
-  void (* flush_buffer)    (GdkGLContext *context);
+  void (* flush_buffer)    (GdkGLContext *context,
+                            cairo_region_t *painted,
+                            cairo_region_t *damage);
   gboolean (* texture_from_surface) (GdkGLContext    *context,
 				     cairo_surface_t *surface,
 				     cairo_region_t  *region);
 };
 
-gboolean        gdk_gl_context_get_swap_interval        (GdkGLContext *context);
+gboolean        gdk_gl_context_get_swap_interval  (GdkGLContext *context);
+void            gdk_gl_context_flush_buffer       (GdkGLContext *context,
+                                                   cairo_region_t *painted,
+                                                   cairo_region_t *damage);
 
 G_END_DECLS
 

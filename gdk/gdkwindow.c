@@ -39,6 +39,7 @@
 #include "gdkmarshalers.h"
 #include "gdkframeclockidle.h"
 #include "gdkwindowimpl.h"
+#include "gdkglcontextprivate.h"
 
 #include <math.h>
 
@@ -281,10 +282,15 @@ create_surface_accumulator (GSignalInvocationHint *ihint,
 
 static GQuark quark_pointer_window = 0;
 
+static gboolean always_use_gl = FALSE;
+
 static void
 gdk_window_class_init (GdkWindowClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  if (g_getenv ("GDK_ALWAYS_USE_GL"))
+    always_use_gl = TRUE;
 
   parent_class = g_type_class_peek_parent (klass);
 
@@ -1387,6 +1393,10 @@ gdk_window_new (GdkWindow     *parent,
   device_manager = gdk_display_get_device_manager (gdk_window_get_display (parent));
   g_signal_connect (device_manager, "device-removed",
                     G_CALLBACK (device_removed_cb), window);
+
+
+  if (always_use_gl)
+    gdk_window_get_paint_gl_context (window);
 
   return window;
 }
@@ -2707,25 +2717,6 @@ gdk_window_create_shared_gl_context (GdkWindow    *window,
                                                                       error);
 }
 
-static void
-gdk_gl_blit_region (GdkWindow *window, cairo_region_t *region)
-{
-  int n_rects, i;
-  int scale = gdk_window_get_scale_factor (window);
-  int wh = gdk_window_get_height (window);
-  cairo_rectangle_int_t rect;
-
-  n_rects = cairo_region_num_rectangles (region);
-  for (i = 0; i < n_rects; i++)
-    {
-      cairo_region_get_rectangle (region, i, &rect);
-      glScissor (rect.x * scale, (wh - rect.y - rect.height) * scale, rect.width * scale, rect.height * scale);
-      glBlitFramebuffer (rect.x * scale, (wh - rect.y - rect.height) * scale, (rect.x + rect.width) * scale, (wh - rect.y) * scale,
-                         rect.x * scale, (wh - rect.y - rect.height) * scale, (rect.x + rect.width) * scale, (wh - rect.y) * scale,
-                         GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    }
-}
-
 /**
  * gdk_window_begin_paint_rect:
  * @window: a #GdkWindow
@@ -2824,15 +2815,15 @@ gdk_window_begin_paint_region (GdkWindow       *window,
     needs_surface = impl_class->begin_paint_region (window, region);
 
   window->current_paint.region = cairo_region_copy (region);
-
   cairo_region_intersect (window->current_paint.region, window->clip_region);
   cairo_region_get_extents (window->current_paint.region, &clip_box);
+
   window->current_paint.flushed_region = cairo_region_create ();
   window->current_paint.need_blend_region = cairo_region_create ();
 
   surface_content = gdk_window_get_content (window);
 
-  window->current_paint.use_gl = TRUE;
+  window->current_paint.use_gl = window->impl_window->gl_paint_context != NULL;
 
   if (window->current_paint.use_gl)
     {
@@ -2858,7 +2849,6 @@ gdk_window_begin_paint_region (GdkWindow       *window,
 	  /* Initial setup */
 	  glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
 	  glDisable (GL_DEPTH_TEST);
-	  glEnable (GL_SCISSOR_TEST);
 	  glDisable(GL_BLEND);
 	  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	  glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
@@ -3054,12 +3044,9 @@ gdk_window_end_paint (GdkWindow *window)
 
 	  cairo_region_destroy (opaque_region);
 
-	  glDrawBuffer(GL_FRONT);
-	  glReadBuffer(GL_BACK);
-	  gdk_gl_blit_region (window, window->current_paint.region);
-	  glDrawBuffer(GL_BACK);
-
-	  glFlush();
+          gdk_gl_context_flush_buffer (window->gl_paint_context,
+                                       window->current_paint.region,
+                                       window->active_update_area);
 
           if (epoxy_has_gl_extension ("GL_GREMEDY_frame_terminator"))
             glFrameTerminatorGREMEDY();
@@ -3562,6 +3549,7 @@ gdk_window_update_native_shapes (GdkWindow *window)
     }
 }
 
+
 /* Process and remove any invalid area on the native window by creating
  * expose events for the window and all non-native descendants.
  */
@@ -3589,15 +3577,26 @@ gdk_window_process_updates_internal (GdkWindow *window)
    */
   if (window->update_area)
     {
-      cairo_region_t *update_area = window->update_area;
+      g_assert (window->active_update_area == NULL); /* No reentrancy */
+
+      window->active_update_area = window->update_area;
       window->update_area = NULL;
 
       if (gdk_window_is_viewable (window))
 	{
 	  cairo_region_t *expose_region;
 
+	  expose_region = cairo_region_copy (window->active_update_area);
+
+          /* Sometimes we can't just paint only the new area, as the windowing system
+             requires more to be repainted. For instance, with opengl you typically
+             repaint all of each frame each time and then swap the buffer, although
+             there are extensions that allow us to reuse part of an old frame */
+          if (GDK_WINDOW_IMPL_GET_CLASS (window->impl)->invalidate_for_new_frame)
+            GDK_WINDOW_IMPL_GET_CLASS (window->impl)->invalidate_for_new_frame (window, expose_region);
+
 	  /* Clip to part visible in impl window */
-	  cairo_region_intersect (update_area, window->clip_region);
+	  cairo_region_intersect (expose_region, window->clip_region);
 
 	  if (debug_updates)
 	    {
@@ -3609,14 +3608,15 @@ gdk_window_process_updates_internal (GdkWindow *window)
 	  impl_class = GDK_WINDOW_IMPL_GET_CLASS (window->impl);
 
           if (impl_class->queue_antiexpose)
-            impl_class->queue_antiexpose (window, update_area);
+            impl_class->queue_antiexpose (window, expose_region);
 
-	  expose_region = cairo_region_copy (update_area);
           impl_class->process_updates_recurse (window, expose_region);
+
 	  cairo_region_destroy (expose_region);
 	}
 
-      cairo_region_destroy (update_area);
+      cairo_region_destroy (window->active_update_area);
+      window->active_update_area = NULL;
     }
 
   window->in_update = FALSE;

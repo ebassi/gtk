@@ -59,6 +59,8 @@ GdkGLContext *  gdk_x11_window_create_gl_context                (GdkWindow      
                                                                  GdkGLProfile       profile,
                                                                  GdkGLContext      *share,
                                                                  GError           **error);
+void            gdk_x11_window_invalidate_for_new_frame         (GdkWindow         *window,
+                                                                 cairo_region_t    *update_area);
 void            gdk_x11_display_destroy_gl_context              (GdkDisplay        *display,
                                                                  GdkGLContext      *context);
 gboolean        gdk_x11_display_make_gl_context_current         (GdkDisplay        *display,

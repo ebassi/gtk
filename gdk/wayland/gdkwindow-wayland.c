@@ -589,15 +589,18 @@ gdk_window_impl_wayland_end_paint (GdkWindow *window)
   cairo_rectangle_int_t rect;
   int i, n;
 
-  gdk_wayland_window_attach_image (window);
-
-  n = cairo_region_num_rectangles (window->current_paint.region);
-  for (i = 0; i < n; i++)
+  if (!window->current_paint.use_gl)
     {
-      cairo_region_get_rectangle (window->current_paint.region, i, &rect);
-      wl_surface_damage (impl->surface,
-                         rect.x, rect.y, rect.width, rect.height);
-      impl->pending_commit = TRUE;
+      gdk_wayland_window_attach_image (window);
+
+      n = cairo_region_num_rectangles (window->current_paint.region);
+      for (i = 0; i < n; i++)
+        {
+          cairo_region_get_rectangle (window->current_paint.region, i, &rect);
+          wl_surface_damage (impl->surface,
+                             rect.x, rect.y, rect.width, rect.height);
+          impl->pending_commit = TRUE;
+        }
     }
 }
 
@@ -2157,6 +2160,7 @@ _gdk_window_impl_wayland_class_init (GdkWindowImplWaylandClass *klass)
   impl_class->set_shadow_width = gdk_wayland_window_set_shadow_width;
   impl_class->show_window_menu = gdk_wayland_window_show_window_menu;
   impl_class->create_gl_context = gdk_wayland_window_create_gl_context;
+  impl_class->invalidate_for_new_frame = gdk_wayland_window_invalidate_for_new_frame;
 }
 
 void

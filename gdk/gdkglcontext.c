@@ -352,11 +352,13 @@ gdk_gl_context_get_visual (GdkGLContext *context)
  * Since: 3.14
  */
 void
-gdk_gl_context_flush_buffer (GdkGLContext *context)
+gdk_gl_context_flush_buffer (GdkGLContext *context,
+                             cairo_region_t *painted,
+                             cairo_region_t *damage)
 {
   g_return_if_fail (GDK_IS_GL_CONTEXT (context));
 
-  GDK_GL_CONTEXT_GET_CLASS (context)->flush_buffer (context);
+  GDK_GL_CONTEXT_GET_CLASS (context)->flush_buffer (context, painted, damage);
 }
 
 /**

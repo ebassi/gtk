@@ -54,13 +54,45 @@ gdk_wayland_gl_context_update (GdkGLContext *context)
   glViewport (0, 0, width, height);
 }
 
-static void
-gdk_wayland_gl_context_flush_buffer (GdkGLContext *context)
+void
+gdk_wayland_window_invalidate_for_new_frame (GdkWindow      *window,
+                                             cairo_region_t *update_area)
 {
+  cairo_rectangle_int_t window_rect;
+
+  /* Minimal update is ok if we're not drawing with gl */
+  if (window->gl_paint_context == NULL)
+    return;
+
+  window_rect.x = 0;
+  window_rect.y = 0;
+  window_rect.width = gdk_window_get_width (window);
+  window_rect.height = gdk_window_get_height (window);
+
+  /* If nothing else is known, repaint everything so that the back
+     buffer is fully up-to-date for the swapbuffer */
+  cairo_region_union_rectangle (update_area, &window_rect);
+}
+
+static void
+gdk_wayland_gl_context_flush_buffer (GdkGLContext *context,
+                                     cairo_region_t *painted,
+                                     cairo_region_t *damage)
+{
+  GdkWindow *window = gdk_gl_context_get_window (context);
+  GdkDisplay *display = gdk_window_get_display (window);
+  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (display);
+  GdkWaylandGLContext *context_wayland = GDK_WAYLAND_GL_CONTEXT (context);
+  EGLSurface egl_surface;
+
   if (!gdk_gl_context_make_current (context))
     return;
 
-  /* TODO:  */
+  egl_surface = gdk_wayland_window_get_egl_surface (window->impl_window,
+                                                    context_wayland->egl_config);
+
+  // TODO: Use eglSwapBuffersWithDamageEXT if available
+  eglSwapBuffers (display_wayland->egl_display, egl_surface);
 }
 
 static void

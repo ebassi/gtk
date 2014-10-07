@@ -124,8 +124,30 @@ maybe_wait_for_vblank (GdkDisplay  *display,
     }
 }
 
+void
+gdk_x11_window_invalidate_for_new_frame (GdkWindow      *window,
+                                         cairo_region_t *update_area)
+{
+  cairo_rectangle_int_t window_rect;
+
+  /* Minimal update is ok if we're not drawing with gl */
+  if (window->gl_paint_context == NULL)
+    return;
+
+  window_rect.x = 0;
+  window_rect.y = 0;
+  window_rect.width = gdk_window_get_width (window);
+  window_rect.height = gdk_window_get_height (window);
+
+  /* If nothing else is known, repaint everything so that the back
+     buffer is fully up-to-date for the swapbuffer */
+  cairo_region_union_rectangle (update_area, &window_rect);
+}
+
 static void
-gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
+gdk_x11_gl_context_flush_buffer (GdkGLContext *context,
+                                 cairo_region_t *painted,
+                                 cairo_region_t *damage)
 {
   GdkX11GLContext *context_x11 = GDK_X11_GL_CONTEXT (context);
   GdkWindow *window = gdk_gl_context_get_window (context);
@@ -135,22 +157,17 @@ gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
   DrawableInfo *info;
   GLXDrawable drawable;
 
-  if (window == NULL)
-    return;
-
   gdk_gl_context_make_current (context);
 
   info = get_glx_drawable_info (window);
-  if (info != NULL && info->drawable != None)
-    drawable = info->drawable;
-  else
-    drawable = gdk_x11_window_get_xid (window);
+
+  drawable = context_x11->drawable;
 
   GDK_NOTE (OPENGL,
-            g_print ("Flushing GLX buffers for %s drawable %lu (window: %lu)\n",
-                     drawable == info->drawable ? "GLX" : "X11",
+            g_print ("Flushing GLX buffers for drawable %lu (window: %lu), frame sync: %s\n",
                      (unsigned long) drawable,
-                     (unsigned long) gdk_x11_window_get_xid (window)));
+                     (unsigned long) gdk_x11_window_get_xid (window),
+                     context_x11->do_frame_sync ? "yes" : "no"));
 
   /* if we are going to wait for the vertical refresh manually
    * we need to flush pending redraws, and we also need to wait
@@ -160,34 +177,34 @@ gdk_x11_gl_context_flush_buffer (GdkGLContext *context)
    * GLX_SGI_swap_control, and we ask the driver to do the right
    * thing.
    */
-  {
-    guint32 end_frame_counter = 0;
-    gboolean has_counter = display_x11->has_glx_video_sync;
-    gboolean can_wait = display_x11->has_glx_video_sync ||
-                        display_x11->has_glx_sync_control;
+  if (context_x11->do_frame_sync)
+    {
+      guint32 end_frame_counter = 0;
+      gboolean has_counter = display_x11->has_glx_video_sync;
+      gboolean can_wait = display_x11->has_glx_video_sync || display_x11->has_glx_sync_control;
 
-    if (display_x11->has_glx_video_sync)
-      glXGetVideoSyncSGI (&end_frame_counter);
+      if (display_x11->has_glx_video_sync)
+        glXGetVideoSyncSGI (&end_frame_counter);
 
-    if (context_x11->do_frame_sync && !display_x11->has_glx_swap_interval)
-      {
-        glFinish ();
+      if (context_x11->do_frame_sync && !display_x11->has_glx_swap_interval)
+        {
+          glFinish ();
 
-        if (has_counter && can_wait)
-          {
-            guint32 last_counter = info != NULL ? info->last_frame_counter : 0;
+          if (has_counter && can_wait)
+            {
+              guint32 last_counter = info != NULL ? info->last_frame_counter : 0;
 
-            if (last_counter == end_frame_counter)
-              maybe_wait_for_vblank (display, drawable);
-          }
-        else if (can_wait)
-          maybe_wait_for_vblank (display, drawable);
-      }
-  }
+              if (last_counter == end_frame_counter)
+                maybe_wait_for_vblank (display, drawable);
+            }
+          else if (can_wait)
+            maybe_wait_for_vblank (display, drawable);
+        }
+    }
 
   glXSwapBuffers (dpy, drawable);
 
-  if (info != NULL && display_x11->has_glx_video_sync)
+  if (context_x11->do_frame_sync && info != NULL && display_x11->has_glx_video_sync)
     glXGetVideoSyncSGI (&info->last_frame_counter);
 }
 
