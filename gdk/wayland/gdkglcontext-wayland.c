@@ -270,7 +270,7 @@ find_eglconfig_for_window (GdkWindow        *window,
   if (!eglChooseConfig (display_wayland->egl_display, attrs, NULL, 0, &count) || count < 1)
     {
       g_set_error_literal (error, GDK_GL_ERROR,
-                           GDK_GL_ERROR_NOT_AVAILABLE,
+                           GDK_GL_ERROR_UNSUPPORTED_FORMAT,
                            _("No available configurations for the given pixel format"));
       return FALSE;
     }
@@ -280,7 +280,7 @@ find_eglconfig_for_window (GdkWindow        *window,
   if (!eglChooseConfig (display_wayland->egl_display, attrs, configs, count, &count) || count < 1)
     {
       g_set_error_literal (error, GDK_GL_ERROR,
-                           GDK_GL_ERROR_NOT_AVAILABLE,
+                           GDK_GL_ERROR_UNSUPPORTED_FORMAT,
                            _("No available configurations for the given pixel format"));
       return FALSE;
     }
@@ -321,7 +321,7 @@ gdk_wayland_window_create_gl_context (GdkWindow     *window,
       !display_wayland->have_egl_khr_create_context)
     {
       g_set_error_literal (error, GDK_GL_ERROR,
-                           GDK_GL_ERROR_NOT_AVAILABLE,
+                           GDK_GL_ERROR_UNSUPPORTED_PROFILE,
                            _("3.2 core GL profile is not available on EGL implementation"));
       return NULL;
     }

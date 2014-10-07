@@ -552,7 +552,7 @@ find_fbconfig_for_window (GdkWindow         *window,
   if (configs == NULL || n_configs == 0)
     {
       g_set_error_literal (error, GDK_GL_ERROR,
-                           GDK_GL_ERROR_NOT_AVAILABLE,
+                           GDK_GL_ERROR_UNSUPPORTED_FORMAT,
                            _("No available configurations for the given pixel format"));
       return FALSE;
     }
@@ -598,7 +598,7 @@ find_fbconfig_for_window (GdkWindow         *window,
     }
 
   g_set_error (error, GDK_GL_ERROR,
-               GDK_GL_ERROR_NOT_AVAILABLE,
+               GDK_GL_ERROR_UNSUPPORTED_FORMAT,
                _("No available configurations for the given RGBA pixel format"));
 
 out:
@@ -677,7 +677,7 @@ gdk_x11_window_create_gl_context (GdkWindow    *window,
       !GDK_X11_DISPLAY (display)->has_glx_create_context)
     {
       g_set_error_literal (error, GDK_GL_ERROR,
-                           GDK_GL_ERROR_NOT_AVAILABLE,
+                           GDK_GL_ERROR_UNSUPPORTED_PROFILE,
                            _("The GLX_ARB_create_context_profile extension "
                              "needed to create 3.2 core profiles is not "
                              "available"));
