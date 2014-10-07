@@ -665,12 +665,16 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   else
     {
       /* Software fallback */
+      GLint alpha_size;
 
       /* TODO: avoid reading back non-required data due to dest clip */
 
+      glGetRenderbufferParameteriv (GL_RENDERBUFFER, GL_RENDERBUFFER_ALPHA_SIZE,  &alpha_size);
+
       image = cairo_surface_create_similar_image (cairo_get_target (cr),
-						  CAIRO_FORMAT_ARGB32,
+						  (alpha_size == 0) ? CAIRO_FORMAT_RGB24 : CAIRO_FORMAT_ARGB32,
 						  width, height);
+
 #ifdef HAVE_CAIRO_SURFACE_SET_DEVICE_SCALE
       cairo_surface_set_device_scale (image, buffer_scale, buffer_scale);
 #endif
