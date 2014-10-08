@@ -80,6 +80,14 @@ GType gtk_gl_area_get_type (void) G_GNUC_CONST;
 GDK_AVAILABLE_IN_3_14
 GtkWidget *     gtk_gl_area_new                 (void);
 
+
+GDK_AVAILABLE_IN_3_14
+gboolean        gtk_gl_area_get_has_alpha      (GtkGLArea        *area);
+
+GDK_AVAILABLE_IN_3_14
+void            gtk_gl_area_set_has_alpha      (GtkGLArea        *area,
+                                                gboolean          has_alpha);
+
 GDK_AVAILABLE_IN_3_14
 GdkGLContext *  gtk_gl_area_get_context         (GtkGLArea        *area);
 

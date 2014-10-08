@@ -157,12 +157,14 @@
 typedef struct {
   GdkGLContext *context;
   GLuint framebuffer;
+  gboolean has_alpha;
 } GtkGLAreaPrivate;
 
 enum {
   PROP_0,
 
   PROP_CONTEXT,
+  PROP_HAS_ALPHA,
 
   LAST_PROP
 };
@@ -198,6 +200,11 @@ gtk_gl_area_set_property (GObject      *gobject,
 {
   switch (prop_id)
     {
+    case PROP_HAS_ALPHA:
+      gtk_gl_area_set_has_alpha (GTK_GL_AREA(gobject),
+                                 g_value_get_boolean (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (gobject, prop_id, pspec);
     }
@@ -213,6 +220,10 @@ gtk_gl_area_get_property (GObject    *gobject,
 
   switch (prop_id)
     {
+    case PROP_HAS_ALPHA:
+      g_value_set_boolean (value, priv->has_alpha);
+      break;
+
     case PROP_CONTEXT:
       g_value_set_object (value, priv->context);
       break;
@@ -288,7 +299,7 @@ gtk_gl_area_draw (GtkWidget *widget,
   GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
   gboolean unused;
   int w, h, scale;
-  GLuint color_rb, depth_rb = 0;
+  GLuint color_rb = 0, depth_rb = 0, color_tex = 0;
   GLenum status;
 
   if (priv->context == NULL)
@@ -301,11 +312,28 @@ gtk_gl_area_draw (GtkWidget *widget,
   w = gtk_widget_get_allocated_width (widget) * scale;
   h = gtk_widget_get_allocated_height (widget) * scale;
 
-  glGenRenderbuffersEXT (1, &color_rb);
-  glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, color_rb);
-  glRenderbufferStorageEXT (GL_RENDERBUFFER_EXT, GL_RGBA8, w, h);
-  glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
-				GL_RENDERBUFFER_EXT, color_rb);
+  if (priv->has_alpha)
+    {
+      /* For alpha we use textures as that is required for blending to work */
+      glGenTextures (1, &color_tex);
+      glBindTexture (GL_TEXTURE_2D, color_tex);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+      glFramebufferTexture2DEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+                                 GL_TEXTURE_2D, color_tex, 0);
+    }
+  else
+    {
+      /* For non-alpha we use render buffers so we can blit instead of texture the result */
+      glGenRenderbuffersEXT (1, &color_rb);
+      glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, color_rb);
+      glRenderbufferStorageEXT (GL_RENDERBUFFER_EXT, GL_RGB8, w, h);
+      glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+                                    GL_RENDERBUFFER_EXT, color_rb);
+    }
 
   if (1 /* use depth buffer */)
     {
@@ -327,9 +355,11 @@ gtk_gl_area_draw (GtkWidget *widget,
 
       glFlush();
 
-      gdk_cairo_draw_gl_render_buffer (cr,
-				       gtk_widget_get_window (widget),
-				       color_rb, scale, 0, 0, w, h);
+      gdk_cairo_draw_from_gl (cr,
+                              gtk_widget_get_window (widget),
+                              color_tex ? color_tex : color_rb,
+                              color_tex ? GL_TEXTURE : GL_RENDERBUFFER,
+                              scale, 0, 0, w, h);
 
       if (!gtk_gl_area_make_current (self))
 	g_error ("can't make old context current again");
@@ -339,7 +369,12 @@ gtk_gl_area_draw (GtkWidget *widget,
       g_print ("fb setup not supported\n");
     }
 
-  glDeleteRenderbuffersEXT(1, &color_rb);
+  if (color_tex != 0)
+    glDeleteTextures(1, &color_tex);
+
+  if (color_rb != 0)
+    glDeleteRenderbuffersEXT(1, &color_rb);
+
   if (depth_rb != 0)
     glDeleteRenderbuffersEXT(1, &depth_rb);
 
@@ -389,6 +424,13 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
                          GDK_TYPE_GL_CONTEXT,
                          G_PARAM_READABLE |
                          G_PARAM_STATIC_STRINGS);
+
+  obj_props[PROP_HAS_ALPHA] =
+    g_param_spec_boolean ("has-alpha",
+                          P_("Has alpha"),
+                          P_("Whether the gl area color buffer has an alpha component"),
+                          FALSE,
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
   gobject_class->set_property = gtk_gl_area_set_property;
   gobject_class->get_property = gtk_gl_area_get_property;
@@ -445,6 +487,35 @@ gtk_gl_area_new (void)
   return g_object_new (GTK_TYPE_GL_AREA,
                        NULL);
 }
+
+gboolean
+gtk_gl_area_get_has_alpha (GtkGLArea        *area)
+{
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
+
+  g_return_val_if_fail (GTK_IS_GL_AREA (area), FALSE);
+
+  return priv->has_alpha;
+}
+
+void
+gtk_gl_area_set_has_alpha (GtkGLArea        *area,
+                           gboolean          has_alpha)
+{
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
+
+  g_return_if_fail (GTK_IS_GL_AREA (area));
+
+  has_alpha = !!has_alpha;
+
+  if (priv->has_alpha != has_alpha)
+    {
+      priv->has_alpha = has_alpha;
+
+      g_object_notify (G_OBJECT (area), "has-alpha");
+    }
+}
+
 
 /**
  * gtk_gl_area_get_context:

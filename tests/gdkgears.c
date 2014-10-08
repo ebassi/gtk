@@ -461,6 +461,14 @@ gtk_gears_set_fps_label (GtkGears *gears, GtkLabel *label)
  ************************************************************************/
 
 static void
+toggle_alpha (GtkWidget *checkbutton,
+              GtkWidget *gears)
+{
+  gtk_gl_area_set_has_alpha (GTK_GL_AREA (gears),
+                             gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(checkbutton)));
+}
+
+static void
 toggle_overlay (GtkWidget *checkbutton,
 		GtkWidget *revealer)
 {
@@ -554,7 +562,7 @@ main (int argc, char *argv[])
 {
   GtkWidget *window, *box, *hbox, *button, *spinner, *check,
     *fps_label, *gears, *extra_hbox, *bbox, *overlay,
-    *revealer, *frame, *label;
+    *revealer, *frame, *label, *scrolled;
   int i;
 
   gtk_init (&argc, &argv);
@@ -587,7 +595,7 @@ main (int argc, char *argv[])
   gtk_container_add (GTK_CONTAINER (frame), hbox);
   gtk_widget_show (hbox);
 
-  label = gtk_label_new ("This is a transparent overlay widget!!!!");
+  label = gtk_label_new ("This is a transparent overlay widget!!!!\nAmazing, eh?");
   gtk_container_add (GTK_CONTAINER (hbox), label);
   gtk_widget_show (label);
 
@@ -632,6 +640,13 @@ main (int argc, char *argv[])
   g_signal_connect (check, "toggled",
                     G_CALLBACK (toggle_spin), spinner);
 
+  check = gtk_check_button_new_with_label ("Alpha");
+  gtk_box_pack_end (GTK_BOX (hbox), check, FALSE, FALSE, 0);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (check), FALSE);
+  gtk_widget_show (check);
+  g_signal_connect (check, "toggled",
+                    G_CALLBACK (toggle_alpha), gears);
+
   check = gtk_check_button_new_with_label ("Overlay");
   gtk_box_pack_end (GTK_BOX (hbox), check, FALSE, FALSE, 0);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (check), FALSE);
@@ -639,10 +654,16 @@ main (int argc, char *argv[])
   g_signal_connect (check, "toggled",
                     G_CALLBACK (toggle_overlay), revealer);
 
+  scrolled = gtk_scrolled_window_new (NULL, NULL);
+  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled),
+                                  GTK_POLICY_AUTOMATIC,
+                                  GTK_POLICY_NEVER);
+  gtk_container_add (GTK_CONTAINER (box), scrolled);
+  gtk_widget_show (scrolled);
 
   extra_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, FALSE);
   gtk_box_set_spacing (GTK_BOX (extra_hbox), 6);
-  gtk_container_add (GTK_CONTAINER (box), extra_hbox);
+  gtk_container_add (GTK_CONTAINER (scrolled), extra_hbox);
   gtk_widget_show (extra_hbox);
 
   bbox = gtk_button_box_new (GTK_ORIENTATION_HORIZONTAL);

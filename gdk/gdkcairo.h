@@ -71,14 +71,15 @@ cairo_surface_t * gdk_cairo_surface_create_from_pixbuf      (const GdkPixbuf *pi
                                                              int scale,
                                                              GdkWindow *for_window);
 GDK_AVAILABLE_IN_3_14
-void       gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
-					    GdkWindow            *window,
-					    int                   render_buffer,
-                                            int                   buffer_scale,
-					    int                   x,
-					    int                   y,
-					    int                   width,
-					    int                   height);
+void       gdk_cairo_draw_from_gl (cairo_t              *cr,
+                                   GdkWindow            *window,
+                                   int                   source,
+                                   int                   source_type,
+                                   int                   buffer_scale,
+                                   int                   x,
+                                   int                   y,
+                                   int                   width,
+                                   int                   height);
 
 
 G_END_DECLS

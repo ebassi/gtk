@@ -528,6 +528,41 @@ gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
   return region;
 }
 
+cairo_region_t *
+gdk_cairo_region_from_clip (cairo_t *cr)
+{
+  cairo_rectangle_list_t *rectangles;
+  cairo_region_t *region;
+  int i;
+
+  rectangles = cairo_copy_clip_rectangle_list (cr);
+
+  if (rectangles->status != CAIRO_STATUS_SUCCESS)
+    return NULL;
+
+  region = cairo_region_create ();
+  for (i = 0; i < rectangles->num_rectangles; i++)
+    {
+      cairo_rectangle_int_t clip_rect;
+      cairo_rectangle_t *rect;
+
+      rect = &rectangles->rectangles[i];
+
+      /* Here we assume clip rects are ints for direct targets, which
+         is true for cairo */
+      clip_rect.x = (int)rect->x;
+      clip_rect.y = (int)rect->y;
+      clip_rect.width = (int)rect->width;
+      clip_rect.height = (int)rect->height;
+
+      cairo_region_union_rectangle (region, &clip_rect);
+    }
+
+  cairo_rectangle_list_destroy (rectangles);
+
+  return region;
+}
+
 static cairo_user_data_key_t direct_key;
 
 void
@@ -542,14 +577,15 @@ gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
    coordinate space, and its top left corner is drawn at the current
    position according to the cairo translation. */
 void
-gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
-				 GdkWindow            *window,
-				 int                   render_buffer,
-                                 int                   buffer_scale,
-				 int                   x,
-				 int                   y,
-				 int                   width,
-				 int                   height)
+gdk_cairo_draw_from_gl (cairo_t              *cr,
+                        GdkWindow            *window,
+                        int                   source,
+                        int                   source_type,
+                        int                   buffer_scale,
+                        int                   x,
+                        int                   y,
+                        int                   width,
+                        int                   height)
 {
   GdkGLContext *context;
   cairo_surface_t *image;
@@ -558,8 +594,9 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   gboolean trivial_transform;
   cairo_surface_t *group_target;
   GdkWindow *direct_window, *impl_window;
-  cairo_rectangle_list_t *clip_rects;
   GLuint framebuffer;
+  GLint alpha_size = 0;
+  cairo_region_t *clip_region;
 
   impl_window = window->impl_window;
 
@@ -572,19 +609,44 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       return;
     }
 
+  clip_region = gdk_cairo_region_from_clip (cr);
+
   if (!gdk_gl_context_make_current (context))
     g_error ("make current failed");
 
   glGenFramebuffersEXT (1, &framebuffer);
   glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, framebuffer);
-  glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, render_buffer);
-  glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
-				GL_RENDERBUFFER_EXT, render_buffer);
-  glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+
+  if (source_type == GL_RENDERBUFFER)
+    {
+      glGetRenderbufferParameteriv (GL_RENDERBUFFER, GL_RENDERBUFFER_ALPHA_SIZE,  &alpha_size);
+
+      glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, source);
+      glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+                                    GL_RENDERBUFFER_EXT, source);
+      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+    }
+  else if (source_type == GL_TEXTURE)
+    {
+      glGetTexLevelParameteriv (GL_TEXTURE_2D, 0, GL_TEXTURE_ALPHA_SIZE,  &alpha_size);
+
+      glBindTexture (GL_TEXTURE_2D, source);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glFramebufferTexture2DEXT (GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+                                 GL_TEXTURE_2D, source, 0);
+      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, 0);
+    }
+  else
+    {
+      g_warning ("Unsupported gl source type %d\n", source_type);
+      return;
+    }
 
   group_target = cairo_get_group_target (cr);
   direct_window = cairo_surface_get_user_data (group_target, &direct_key);
-  clip_rects = cairo_copy_clip_rectangle_list (cr);
 
   cairo_get_matrix (cr, &matrix);
 
@@ -597,13 +659,20 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
     matrix.xx == 1.0 && matrix.xy == 0.0 &&
     matrix.yx == 0.0 && matrix.yy == 1.0;
 
-  if (direct_window != NULL &&
+  /* For direct paint of non-alpha renderbuffer, we can
+     just do a bitblit */
+  if (source_type == GL_RENDERBUFFER &&
+      alpha_size == 0 &&
+      direct_window != NULL &&
       direct_window->current_paint.use_gl &&
       trivial_transform &&
-      clip_rects->status == CAIRO_STATUS_SUCCESS)
+      clip_region != NULL)
     {
       int window_height;
       int i;
+
+      /* Translate to impl coords */
+      cairo_region_translate (clip_region, dx, dy);
 
       glEnable (GL_SCISSOR_TEST);
 
@@ -612,18 +681,15 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 
 #define FLIP_Y(_y) (window_height*window_scale - (_y))
 
-      for (i = 0; i < clip_rects->num_rectangles; i++)
+      for (i = 0; i < cairo_region_num_rectangles (clip_region); i++)
 	{
 	  cairo_rectangle_int_t clip_rect, dest;
-	  cairo_rectangle_t *rect;
 
-	  rect = &clip_rects->rectangles[i];
-	  /* Here we assume clip rects are ints for direct targets,
-	     which is true for cairo */
-	  clip_rect.x = (int)(rect->x + dx) * window_scale;
-	  clip_rect.y = (int)(rect->y + dy) * window_scale;
-	  clip_rect.width = (int)rect->width * window_scale;
-	  clip_rect.height = (int)rect->height * window_scale;
+          cairo_region_get_rectangle (clip_region, i, &clip_rect);
+	  clip_rect.x *= window_scale;
+	  clip_rect.y *= window_scale;
+	  clip_rect.width *= window_scale;
+	  clip_rect.height *= window_scale;
 
 	  glScissor (clip_rect.x, FLIP_Y (clip_rect.y + clip_rect.height),
 		     clip_rect.width, clip_rect.height);
@@ -653,6 +719,8 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 
                   cairo_region_union_rectangle (impl_window->current_paint.flushed_region,
                                                 &flushed_rect);
+                  cairo_region_subtract_rectangle (impl_window->current_paint.need_blend_region,
+                                                   &flushed_rect);
                 }
 	    }
 	}
@@ -662,15 +730,123 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
 #undef FLIP_Y
 
     }
+  /* For direct paint of alpha or non-alpha textures we can use texturing */
+  else if (source_type == GL_TEXTURE &&
+           direct_window != NULL &&
+           direct_window->current_paint.use_gl &&
+           trivial_transform &&
+           clip_region != NULL)
+    {
+      int window_height;
+      GLint texture_width;
+      GLint texture_height;
+      int i;
+
+      /* Translate to impl coords */
+      cairo_region_translate (clip_region, dx, dy);
+
+      glGetTexLevelParameteriv (GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH,  &texture_width);
+      glGetTexLevelParameteriv (GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT,  &texture_height);
+
+      if (alpha_size != 0)
+        {
+          cairo_region_t *opaque_region, *blend_region;
+
+          opaque_region = cairo_region_copy (clip_region);
+          cairo_region_subtract (opaque_region, impl_window->current_paint.flushed_region);
+          cairo_region_subtract (opaque_region, impl_window->current_paint.need_blend_region);
+
+          if (!cairo_region_is_empty (opaque_region))
+            gdk_gl_texture_from_surface (impl_window->current_paint.surface,
+                                         opaque_region);
+
+          blend_region = cairo_region_copy (clip_region);
+          cairo_region_intersect (blend_region, impl_window->current_paint.need_blend_region);
+
+          glEnable (GL_BLEND);
+          if (!cairo_region_is_empty (blend_region))
+            gdk_gl_texture_from_surface (impl_window->current_paint.surface,
+                                         blend_region);
+
+          cairo_region_destroy (opaque_region);
+          cairo_region_destroy (blend_region);
+        }
+      glEnable (GL_SCISSOR_TEST);
+      glEnable (GL_TEXTURE_2D);
+
+      window_height = gdk_window_get_height (impl_window);
+
+#define FLIP_Y(_y) (window_height*window_scale - (_y))
+
+      for (i = 0; i < cairo_region_num_rectangles (clip_region); i++)
+	{
+	  cairo_rectangle_int_t clip_rect, dest;
+
+          cairo_region_get_rectangle (clip_region, i, &clip_rect);
+
+	  clip_rect.x *= window_scale;
+	  clip_rect.y *= window_scale;
+	  clip_rect.width *= window_scale;
+	  clip_rect.height *= window_scale;
+
+	  glScissor (clip_rect.x, FLIP_Y (clip_rect.y + clip_rect.height),
+		     clip_rect.width, clip_rect.height);
+
+	  dest.x = dx * window_scale;
+	  dest.y = dy * window_scale;
+	  dest.width = width * window_scale / buffer_scale;
+	  dest.height = height * window_scale / buffer_scale;
+
+	  if (gdk_rectangle_intersect (&clip_rect, &dest, &dest))
+	    {
+	      int clipped_src_x = x + (dest.x - dx * window_scale);
+	      int clipped_src_y = y + (height - dest.height - (dest.y - dy * window_scale));
+
+              glBegin (GL_QUADS);
+              glTexCoord2f (clipped_src_x / (float)texture_width, clipped_src_y / (float)texture_height);
+              glVertex2f (dest.x, FLIP_Y(dest.y + dest.height));
+
+              glTexCoord2f ((clipped_src_x + dest.width) / (float)texture_width, clipped_src_y / (float)texture_height);
+              glVertex2f (dest.x + dest.width, FLIP_Y(dest.y + dest.height));
+
+              glTexCoord2f ((clipped_src_x + dest.width) / (float)texture_width, (clipped_src_y + dest.height) / (float)texture_height);
+              glVertex2f (dest.x + dest.width, FLIP_Y(dest.y));
+
+              glTexCoord2f (clipped_src_x / (float)texture_width, (clipped_src_y + dest.height) / (float)texture_height);
+              glVertex2f (dest.x, FLIP_Y(dest.y));
+              glEnd();
+
+              if (impl_window->current_paint.flushed_region)
+                {
+                  cairo_rectangle_int_t flushed_rect;
+
+                  flushed_rect.x = dest.x / window_scale;
+                  flushed_rect.y = dest.y / window_scale;
+                  flushed_rect.width = (dest.x + dest.width + window_scale - 1) / window_scale - flushed_rect.x;
+                  flushed_rect.height = (dest.y + dest.height + window_scale - 1) / window_scale - flushed_rect.y;
+
+                  cairo_region_union_rectangle (impl_window->current_paint.flushed_region,
+                                                &flushed_rect);
+                  cairo_region_subtract_rectangle (impl_window->current_paint.need_blend_region,
+                                                   &flushed_rect);
+                }
+	    }
+	}
+
+      if (alpha_size != 0)
+        glDisable (GL_BLEND);
+
+      glDisable (GL_TEXTURE_2D);
+      glDisable (GL_SCISSOR_TEST);
+
+#undef FLIP_Y
+
+    }
   else
     {
       /* Software fallback */
-      GLint alpha_size;
 
       /* TODO: avoid reading back non-required data due to dest clip */
-
-      glGetRenderbufferParameteriv (GL_RENDERBUFFER, GL_RENDERBUFFER_ALPHA_SIZE,  &alpha_size);
-
       image = cairo_surface_create_similar_image (cairo_get_target (cr),
 						  (alpha_size == 0) ? CAIRO_FORMAT_RGB24 : CAIRO_FORMAT_ARGB32,
 						  width, height);
@@ -694,7 +870,7 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
       cairo_translate (cr, 0, -height / buffer_scale);
 
       cairo_set_source_surface (cr, image, 0, 0);
-      cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
       cairo_paint (cr);
 
       cairo_surface_destroy (image);
@@ -706,7 +882,8 @@ gdk_cairo_draw_gl_render_buffer (cairo_t              *cr,
   glBindFramebufferEXT (GL_FRAMEBUFFER_EXT, 0);
   glDeleteFramebuffersEXT (1, &framebuffer);
 
-  cairo_rectangle_list_destroy (clip_rects);
+  if (clip_region)
+    cairo_region_destroy (clip_region);
 }
 
 void

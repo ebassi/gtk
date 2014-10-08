@@ -337,12 +337,14 @@ void _gdk_windowing_event_data_free (GdkEvent       *event);
 void _gdk_set_window_state (GdkWindow *window,
                             GdkWindowState new_state);
 
-gboolean _gdk_cairo_surface_extents (cairo_surface_t *surface,
-                                     GdkRectangle *extents);
-void gdk_gl_texture_from_surface (cairo_surface_t *surface,
-				  cairo_region_t *region);
-void gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
-				       GdkWindow       *window);
+gboolean        _gdk_cairo_surface_extents       (cairo_surface_t *surface,
+                                                  GdkRectangle    *extents);
+void            gdk_gl_texture_from_surface      (cairo_surface_t *surface,
+                                                  cairo_region_t  *region);
+void            gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
+                                                  GdkWindow       *window);
+cairo_region_t *gdk_cairo_region_from_clip       (cairo_t         *cr);
+
 
 /*************************************
  * Interfaces used by windowing code *
