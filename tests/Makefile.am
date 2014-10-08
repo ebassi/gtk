@@ -492,6 +492,12 @@ testtitlebar_SOURCES = testtitlebar.c
 
 testwindowsize_SOURCES = testwindowsize.c
 
+gdkgears_SOURCES =	\
+	gdkgears.c	\
+	gtkgears.c	\
+	gtkgears.h
+
+
 EXTRA_DIST += 			\
 	gradient1.png		\
 	testgtk.1 		\
