@@ -46,18 +46,15 @@ GDK_AVAILABLE_IN_3_14
 GdkDisplay *            gdk_gl_context_get_display      (GdkGLContext *context);
 GDK_AVAILABLE_IN_3_14
 GdkVisual *             gdk_gl_context_get_visual       (GdkGLContext *context);
+GDK_AVAILABLE_IN_3_14
+GdkWindow *             gdk_gl_context_get_window       (GdkGLContext *context);
 
 GDK_AVAILABLE_IN_3_14
 gboolean                gdk_gl_context_make_current     (GdkGLContext *context);
 GDK_AVAILABLE_IN_3_14
-GdkWindow *             gdk_gl_context_get_window       (GdkGLContext *context);
-GDK_AVAILABLE_IN_3_14
-void                    gdk_gl_context_update           (GdkGLContext *context);
-
+GdkGLContext *          gdk_gl_context_get_current      (void);
 GDK_AVAILABLE_IN_3_14
 void                    gdk_gl_context_clear_current    (void);
-GDK_AVAILABLE_IN_3_14
-GdkGLContext *          gdk_gl_context_get_current      (void);
 
 G_END_DECLS
 

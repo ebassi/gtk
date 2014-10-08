@@ -366,26 +366,6 @@ gdk_gl_context_get_window (GdkGLContext *context)
 }
 
 /**
- * gdk_gl_context_update:
- * @context: a #GdkGLContext
- *
- * Updates the @context when the #GdkWindow used to display the
- * rendering changes size or position.
- *
- * Typically, you will call this function after calling
- * gdk_window_resize() or gdk_window_move_resize().
- *
- * Since: 3.14
- */
-void
-gdk_gl_context_update (GdkGLContext *context)
-{
-  g_return_if_fail (GDK_IS_GL_CONTEXT (context));
-
-  GDK_GL_CONTEXT_GET_CLASS (context)->update (context);
-}
-
-/**
  * gdk_gl_context_clear_current:
  *
  * Clears the current #GdkGLContext.

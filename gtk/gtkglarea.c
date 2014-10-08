@@ -253,10 +253,9 @@ gtk_gl_area_realize (GtkWidget *widget)
   GTK_WIDGET_CLASS (gtk_gl_area_parent_class)->realize (widget);
 
   window = gtk_widget_get_window (widget);
-  priv->context = gdk_window_create_shared_gl_context (window,
-                                                       GDK_GL_PROFILE_DEFAULT,
-                                                       gdk_window_get_paint_gl_context (window),
-                                                       NULL);
+  priv->context = gdk_window_create_gl_context (window,
+                                                GDK_GL_PROFILE_DEFAULT,
+                                                NULL);
   if (priv->context != NULL)
     {
       if (gdk_gl_context_make_current (priv->context))

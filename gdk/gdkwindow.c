@@ -1427,7 +1427,15 @@ gdk_window_new (GdkWindow     *parent,
 
 
   if (always_use_gl)
-    gdk_window_get_paint_gl_context (window);
+    {
+      GError *error = NULL;
+
+      if (gdk_window_get_paint_gl_context (window, &error) == NULL)
+        {
+          g_warning ("Unable to force GL enabled: %s\n", error->message);
+          g_error_free (error);
+        }
+    }
 
   return window;
 }
@@ -2715,11 +2723,14 @@ gdk_window_ref_impl_surface (GdkWindow *window)
 }
 
 GdkGLContext *
-gdk_window_get_paint_gl_context (GdkWindow *window)
+gdk_window_get_paint_gl_context (GdkWindow *window, GError **error)
 {
   if (window->impl_window->gl_paint_context == NULL)
     window->impl_window->gl_paint_context =
-      gdk_window_create_gl_context (window, GDK_GL_PROFILE_DEFAULT, NULL);
+      GDK_WINDOW_IMPL_GET_CLASS (window->impl)->create_gl_context (window,
+                                                                   GDK_GL_PROFILE_DEFAULT,
+                                                                   NULL,
+                                                                   error);
 
   return window->impl_window->gl_paint_context;
 }
@@ -2729,22 +2740,18 @@ gdk_window_create_gl_context (GdkWindow    *window,
                               GdkGLProfile  profile,
                               GError      **error)
 {
-  return gdk_window_create_shared_gl_context (window, profile, NULL, error);
-}
+  GdkGLContext *paint_context;
 
-GdkGLContext *
-gdk_window_create_shared_gl_context (GdkWindow    *window,
-                                     GdkGLProfile  profile,
-                                     GdkGLContext *shared_context,
-                                     GError      **error)
-{
   g_return_val_if_fail (GDK_IS_WINDOW (window), NULL);
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (shared_context) || shared_context == NULL, NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+  paint_context = gdk_window_get_paint_gl_context (window, error);
+  if (paint_context == NULL)
+    return NULL;
 
   return GDK_WINDOW_IMPL_GET_CLASS (window->impl)->create_gl_context (window,
                                                                       profile,
-                                                                      shared_context,
+                                                                      paint_context,
                                                                       error);
 }
 
@@ -2859,11 +2866,11 @@ gdk_window_begin_paint_region (GdkWindow       *window,
   if (window->current_paint.use_gl)
     {
       GdkGLContext *context;
+
       int ww = gdk_window_get_width (window) * gdk_window_get_scale_factor (window);
       int wh = gdk_window_get_height (window) * gdk_window_get_scale_factor (window);
 
-      context = gdk_window_get_paint_gl_context (window);
-
+      context = gdk_window_get_paint_gl_context (window, NULL);
       if (context == NULL || !gdk_gl_context_make_current (context))
 	{
 	  g_warning ("gl rendering failed, context: %p", context);

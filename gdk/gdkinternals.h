@@ -358,6 +358,9 @@ void       _gdk_window_destroy           (GdkWindow      *window,
 void       _gdk_window_clear_update_area (GdkWindow      *window);
 void       _gdk_window_update_size       (GdkWindow      *window);
 gboolean   _gdk_window_update_viewable   (GdkWindow      *window);
+GdkGLContext * gdk_window_get_paint_gl_context (GdkWindow *window,
+                                                GError   **error);
+
 
 void       _gdk_window_process_updates_recurse (GdkWindow *window,
                                                 cairo_region_t *expose_region);

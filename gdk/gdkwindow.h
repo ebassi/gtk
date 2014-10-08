@@ -1112,17 +1112,8 @@ gboolean  gdk_window_show_window_menu          (GdkWindow      *window,
                                                 GdkEvent       *event);
 
 GDK_AVAILABLE_IN_3_14
-GdkGLContext * gdk_window_get_paint_gl_context (GdkWindow *window);
-
-GDK_AVAILABLE_IN_3_14
 GdkGLContext * gdk_window_create_gl_context        (GdkWindow    *window,
                                                     GdkGLProfile  profile,
-                                                    GError      **error);
-
-GDK_AVAILABLE_IN_3_14
-GdkGLContext * gdk_window_create_shared_gl_context (GdkWindow    *window,
-                                                    GdkGLProfile  profile,
-                                                    GdkGLContext *shared,
                                                     GError      **error);
 
 

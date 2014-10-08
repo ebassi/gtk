@@ -602,7 +602,7 @@ gdk_cairo_draw_from_gl (cairo_t              *cr,
 
   window_scale = gdk_window_get_scale_factor (impl_window);
 
-  context = gdk_window_get_paint_gl_context (window);
+  context = gdk_window_get_paint_gl_context (window, NULL);
   if (context == NULL)
     {
       g_warning ("gdk_cairo_draw_gl_render_buffer failed - no paint context");
