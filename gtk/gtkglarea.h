@@ -89,6 +89,13 @@ void            gtk_gl_area_set_has_alpha      (GtkGLArea        *area,
                                                 gboolean          has_alpha);
 
 GDK_AVAILABLE_IN_3_14
+gboolean        gtk_gl_area_get_has_depth_buffer (GtkGLArea        *area);
+
+GDK_AVAILABLE_IN_3_14
+void            gtk_gl_area_set_has_depth_buffer (GtkGLArea        *area,
+                                                  gboolean          has_alpha);
+
+GDK_AVAILABLE_IN_3_14
 GdkGLContext *  gtk_gl_area_get_context         (GtkGLArea        *area);
 
 GDK_AVAILABLE_IN_3_14

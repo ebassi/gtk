@@ -158,6 +158,7 @@ typedef struct {
   GdkGLContext *context;
   GLuint framebuffer;
   gboolean has_alpha;
+  gboolean has_depth_buffer;
 } GtkGLAreaPrivate;
 
 enum {
@@ -165,6 +166,7 @@ enum {
 
   PROP_CONTEXT,
   PROP_HAS_ALPHA,
+  PROP_HAS_DEPTH_BUFFER,
 
   LAST_PROP
 };
@@ -205,6 +207,11 @@ gtk_gl_area_set_property (GObject      *gobject,
                                  g_value_get_boolean (value));
       break;
 
+    case PROP_HAS_DEPTH_BUFFER:
+      gtk_gl_area_set_has_depth_buffer (GTK_GL_AREA(gobject),
+                                        g_value_get_boolean (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (gobject, prop_id, pspec);
     }
@@ -222,6 +229,10 @@ gtk_gl_area_get_property (GObject    *gobject,
     {
     case PROP_HAS_ALPHA:
       g_value_set_boolean (value, priv->has_alpha);
+      break;
+
+    case PROP_HAS_DEPTH_BUFFER:
+      g_value_set_boolean (value, priv->has_depth_buffer);
       break;
 
     case PROP_CONTEXT:
@@ -335,7 +346,7 @@ gtk_gl_area_draw (GtkWidget *widget,
                                     GL_RENDERBUFFER_EXT, color_rb);
     }
 
-  if (1 /* use depth buffer */)
+  if (priv->has_depth_buffer)
     {
       glGenRenderbuffersEXT (1, &depth_rb);
       glBindRenderbufferEXT (GL_RENDERBUFFER_EXT, depth_rb);
@@ -432,6 +443,13 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
                           FALSE,
                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
+  obj_props[PROP_HAS_DEPTH_BUFFER] =
+    g_param_spec_boolean ("has-depth-buffer",
+                          P_("Has depth buffer"),
+                          P_("Whether a depth buffer is allocated"),
+                          TRUE,
+                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
+
   gobject_class->set_property = gtk_gl_area_set_property;
   gobject_class->get_property = gtk_gl_area_get_property;
   gobject_class->dispose = gtk_gl_area_dispose;
@@ -468,8 +486,12 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
 static void
 gtk_gl_area_init (GtkGLArea *self)
 {
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (self);
+
   gtk_widget_set_has_window (GTK_WIDGET (self), FALSE);
   gtk_widget_set_app_paintable (GTK_WIDGET (self), TRUE);
+
+  priv->has_depth_buffer = TRUE;
 }
 
 /**
@@ -516,6 +538,33 @@ gtk_gl_area_set_has_alpha (GtkGLArea        *area,
     }
 }
 
+gboolean
+gtk_gl_area_get_has_depth_buffer (GtkGLArea        *area)
+{
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
+
+  g_return_val_if_fail (GTK_IS_GL_AREA (area), FALSE);
+
+  return priv->has_depth_buffer;
+}
+
+void
+gtk_gl_area_set_has_depth_buffer (GtkGLArea        *area,
+                                  gboolean          has_depth_buffer)
+{
+  GtkGLAreaPrivate *priv = gtk_gl_area_get_instance_private (area);
+
+  g_return_if_fail (GTK_IS_GL_AREA (area));
+
+  has_depth_buffer = !!has_depth_buffer;
+
+  if (priv->has_depth_buffer != has_depth_buffer)
+    {
+      priv->has_depth_buffer = has_depth_buffer;
+
+      g_object_notify (G_OBJECT (area), "has-depth-buffer");
+    }
+}
 
 /**
  * gtk_gl_area_get_context:
