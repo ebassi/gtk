@@ -576,6 +576,31 @@ gdk_cairo_surface_mark_as_direct (cairo_surface_t *surface,
 /* x,y,width,height describes a rectangle in the gl render buffer
    coordinate space, and its top left corner is drawn at the current
    position according to the cairo translation. */
+/**
+ * gdk_cairo_draw_from_gl
+ * @cr: a cairo context
+ * @window: The window we're rendering for (not necessarily into)
+ * @source: The GL id of the source buffer
+ * @source_type: The type of the @source
+ * @buffer_scale: The scale-factor that the @source buffer is allocated for
+ * @x: The source x position in @source to start copying from in GL coordinates
+ * @y: The source y position in @source to start copying from in GL coordinates
+ * @width: The width of the region to draw
+ * @height: The height of the region to draw
+ *
+ * This is the main way to draw GL content in Gtk+. It takes a render buffer id
+ * (@source_type == #GL_RENDERBUFFER) or a texture id (@source_type == #GL_TEXTURE)
+ * and draws it onto @cr with an OVER operation, respecting the current clip.
+ *
+ * This will work for *all* cairo_t, as long as @window is realized, but the
+ * fallback implementation that reads back the pixels from the buffer may be
+ * used in the general case. In the case of direct drawing to a window with
+ * no special effects applied to @cr it will however use a more efficient
+ * approach.
+ *
+ * For #GL_RENDERBUFFER the code will always fall back to software for buffers
+ * with alpha components, so make sure you use #GL_TEXTURE if using alpha.
+ */
 void
 gdk_cairo_draw_from_gl (cairo_t              *cr,
                         GdkWindow            *window,

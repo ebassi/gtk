@@ -54,7 +54,6 @@ struct _GtkGLArea
 
 /**
  * GtkGLAreaClass:
- * @create_context: class closure for the #GtkGLArea::create-context signal
  * @render: class closure for the #GtkGLArea::render signal
  *
  * The `GtkGLAreaClass` structure contains only private data.
@@ -93,7 +92,7 @@ gboolean        gtk_gl_area_get_has_depth_buffer (GtkGLArea        *area);
 
 GDK_AVAILABLE_IN_3_14
 void            gtk_gl_area_set_has_depth_buffer (GtkGLArea        *area,
-                                                  gboolean          has_alpha);
+                                                  gboolean          has_depth_buffer);
 
 GDK_AVAILABLE_IN_3_14
 GdkGLContext *  gtk_gl_area_get_context         (GtkGLArea        *area);

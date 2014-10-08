@@ -2735,6 +2735,22 @@ gdk_window_get_paint_gl_context (GdkWindow *window, GError **error)
   return window->impl_window->gl_paint_context;
 }
 
+/**
+ * gdk_window_create_gl_context:
+ * @window: a #GdkWindow
+ * @profile: the GL profile the context should target
+ * @error: return location for an error
+ *
+ * Creates a new #GdkGLContext for the given window, matching the
+ * framebuffer format to the visual of the #GdkWindow.
+ *
+ * If the creation of the #GdkGLContext failed, @error will be set.
+ *
+ * Returns: (transfer full): the newly created #GdkGLContext, or
+ * %NULL on error
+ *
+ * Since: 3.16
+ **/
 GdkGLContext *
 gdk_window_create_gl_context (GdkWindow    *window,
                               GdkGLProfile  profile,
@@ -2926,6 +2942,20 @@ gdk_window_begin_paint_region (GdkWindow       *window,
     gdk_window_clear_backing_region (window);
 }
 
+/**
+ * gdk_window_mark_paint_from_clip:
+ * @window: a #GdkWindow
+ * @cr: a #cairo_t
+ *
+ * If you call this during a paint (e.g. between gdk_window_begin_paint_region()
+ * and gdk_window_end_paint() then gdk will mark the current clip region of the
+ * window as being drawn. This is required when mixing GL rendering via
+ * gdk_cairo_draw_from_gl() and cairo rendering, as otherwise gdk has no way
+ * of knowing when something paints over the gl drawn regions.
+ *
+ * This is typically called automatically by Gtk and you don't need
+ * to care about this.
+ **/
 void
 gdk_window_mark_paint_from_clip (GdkWindow          *window,
 				 cairo_t            *cr)
@@ -2936,7 +2966,7 @@ gdk_window_mark_paint_from_clip (GdkWindow          *window,
   if (impl_window->current_paint.surface == NULL ||
       cairo_get_target (cr) != impl_window->current_paint.surface)
     return;
-  
+
   if (cairo_region_is_empty (impl_window->current_paint.flushed_region))
     return;
 

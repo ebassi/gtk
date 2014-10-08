@@ -156,8 +156,6 @@ gdk_display_supports_input_shapes
 gdk_display_supports_composite
 gdk_display_get_app_launch_context
 gdk_display_notify_startup_complete
-gdk_display_validate_gl_pixel_format
-gdk_display_get_gl_context
 
 <SUBSECTION Standard>
 GDK_DISPLAY
@@ -396,6 +394,8 @@ gdk_window_constrain_size
 gdk_window_beep
 gdk_window_get_scale_factor
 gdk_window_set_opaque_region
+gdk_window_create_gl_context
+gdk_window_mark_paint_from_clip
 
 <SUBSECTION>
 gdk_window_get_clip_region
@@ -619,6 +619,7 @@ gdk_cairo_rectangle
 gdk_cairo_region
 gdk_cairo_region_create_from_surface
 gdk_cairo_surface_create_from_pixbuf
+gdk_cairo_draw_from_gl
 </SECTION>
 
 <SECTION>
@@ -1285,46 +1286,23 @@ gdk_frame_get_type
 <SECTION>
 <FILE>gdkglcontext</FILE>
 GdkGLContext
-gdk_gl_context_get_display
-gdk_gl_context_get_pixel_format
 gdk_gl_context_get_visual
-gdk_gl_context_set_window
 gdk_gl_context_get_window
 gdk_gl_context_make_current
-gdk_gl_context_flush_buffer
-gdk_gl_context_update
 gdk_gl_context_clear_current
 gdk_gl_context_get_current
+GDK_GL_ERROR
+GDK_TYPE_GL_ERROR
+GDK_TYPE_GL_PROFILE
+
 <SUBSECTION Standard>
 GDK_GL_CONTEXT
 GDK_IS_GL_CONTEXT
 GDK_TYPE_GL_CONTEXT
+GDK_GL_CONTEXT_CLASS
+GDK_GL_CONTEXT_GET_CLASS
+GDK_IS_GL_CONTEXT_CLASS
 gdk_gl_context_get_type
+gdk_gl_error_quark
 </SECTION>
 
-<SECTION>
-<FILE>gdkglpixelformat</FILE>
-GdkGLPixelFormat
-GdkGLPixelFormatProfile
-gdk_gl_pixel_format_new
-<SUBSECTION>
-gdk_gl_pixel_format_get_double_buffer
-gdk_gl_pixel_format_get_multi_sample
-gdk_gl_pixel_format_get_color_size
-gdk_gl_pixel_format_get_alpha_size
-gdk_gl_pixel_format_get_depth_size
-gdk_gl_pixel_format_get_stencil_size
-gdk_gl_pixel_format_get_accum_size
-gdk_gl_pixel_format_get_aux_buffers
-gdk_gl_pixel_format_get_sample_buffers
-gdk_gl_pixel_format_get_samples
-<SUBSECTION>
-GDK_GL_PIXEL_FORMAT_ERROR
-GdkGLPixelFormatError
-<SUBSECTION Standard>
-GDK_GL_PIXEL_FORMAT
-GDK_IS_GL_PIXEL_FORMAT
-GDK_TYPE_GL_PIXEL_FORMAT
-gdk_gl_pixel_format_error_quark
-gdk_gl_pixel_format_get_type
-</SECTION>

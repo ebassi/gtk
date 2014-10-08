@@ -35,8 +35,10 @@
  *
  * #GtkGLArea is a widget that allows drawing with OpenGL.
  *
- * #GtkGLArea can set up its own #GdkGLContext using a provided
- * #GdkGLPixelFormat, or can use a given #GdkGLContext.
+ * #GtkGLArea sets up its own #GdkGLContext for the window it creates, and
+ * creates a custom GL framebuffer that the widget will do GL rendering onto.
+ * It also ensures that this framebuffer is the default GL rendering target
+ * when rendering.
  *
  * In order to draw, you have to connect to the #GtkGLArea::render signal,
  * or subclass #GtkGLArea and override the @GtkGLAreaClass.render() virtual
@@ -52,15 +54,8 @@
  * create a widget instance and connect to the #GtkGLArea::render signal:
  *
  * |[<!-- language="C" -->
- *   // create a double buffered pixel format
- *   GdkGLPixelFormat *format =
- *     gdk_gl_pixel_format_new ("double-buffer", TRUE);
- *
  *   // create a GtkGLArea instance
- *   GtkWidget *gl_area = gtk_gl_area_new (format);
- *
- *   // the GtkGLArea now owns the GdkGLPixelFormat
- *   g_object_unref (format);
+ *   GtkWidget *gl_area = gtk_gl_area_new ();
  *
  *   // connect to the "render" signal
  *   g_signal_connect (gl_area, "render", G_CALLBACK (render), NULL);
@@ -87,7 +82,7 @@
  *
  *     // we completed our drawing; the draw commands will be
  *     // flushed at the end of the signal emission chain, and
- *     // the buffers swapped if needed
+ *     // the buffers will be drawn on the window
  *     return TRUE;
  *   }
  * ]|
@@ -118,40 +113,6 @@
  * geometry primitives, like a Vertex Buffer Object, and only redraw what
  * changed in your scene.
  *
- * ## Using different OpenGL contexts with GtkGLArea ##
- *
- * The #GtkGLArea widget will create a #GdkGLContext for the given
- * pixel format passed on creation. It is possible, however, to change
- * this default behavior by connecting to the #GtkGLArea::create-context
- * signal, or by overriding the #GtkGLAreaClass.create_context() virtual
- * function on a #GtkGLArea subclass.
- *
- * If you need to let a #GtkGLArea create a #GdkGLContext with shared
- * data with another context you can use the #GtkGLArea::create-context
- * to override the creation of the widget-specific OpenGL context:
- *
- * |[<!-- language="C" -->
- *   static GdkGLContext *
- *   create_shared_context (GtkGLArea        *area,
- *                          GdkGLPixelFormat *format,
- *                          GdkGLContext     *shared_context)
- *   {
- *     GdkDisplay *display;
- *
- *     display = gtk_widget_get_display (GTK_WIDGET (area));
- *     if (display == NULL)
- *       display = gdk_display_get_default ();
- *
- *     // create a GdkGLContext that has shared texture namespace
- *     // and display lists with a given context
- *     return gdk_display_create_shared_gl_context (display, format,
- *                                                  shared_context,
- *                                                  NULL);
- *   }
- * ]|
- *
- * The #GtkGLArea will take ownership of the #GdkGLContext returned
- * by the #GtkGLArea::create-context signal.
  */
 
 typedef struct {
@@ -353,7 +314,10 @@ gtk_gl_area_draw (GtkWidget *widget,
       glRenderbufferStorageEXT (GL_RENDERBUFFER_EXT, GL_DEPTH_COMPONENT24, w, h);
       glFramebufferRenderbufferEXT (GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
 				    GL_RENDERBUFFER_EXT, depth_rb);
+      glEnable (GL_DEPTH_TEST);
     }
+  else
+    glDisable (GL_DEPTH_TEST);
 
   status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
   if (status ==  GL_FRAMEBUFFER_COMPLETE_EXT)
@@ -425,7 +389,7 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
    * instance. See the #GtkGLArea::create-context signal on how to
    * override the default behavior.
    *
-   * Since: 3.14
+   * Since: 3.16
    */
   obj_props[PROP_CONTEXT] =
     g_param_spec_object ("context",
@@ -435,6 +399,18 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
                          G_PARAM_READABLE |
                          G_PARAM_STATIC_STRINGS);
 
+  /**
+   * GtkGLArea:has-alpha:
+   *
+   * If set to #TRUE the buffer allocated by the widget will have an alpha channel component,
+   * and when rendering to the window the result will be composited over whatever is below
+   * the widget.
+   *
+   * If set to #FALSE there will be no alpha channel, and the buffer will fully replace anything
+   * below the widget.
+   *
+   * Since: 3.16
+   */
   obj_props[PROP_HAS_ALPHA] =
     g_param_spec_boolean ("has-alpha",
                           P_("Has alpha"),
@@ -442,6 +418,14 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
                           FALSE,
                           GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
 
+  /**
+   * GtkGLArea:has-depth-buffer:
+   *
+   * If set to #TRUE the widget will allocate and enable a depth buffer for the target
+   * framebuffer.
+   *
+   * Since: 3.16
+   */
   obj_props[PROP_HAS_DEPTH_BUFFER] =
     g_param_spec_boolean ("has-depth-buffer",
                           P_("Has depth buffer"),
@@ -464,12 +448,12 @@ gtk_gl_area_class_init (GtkGLAreaClass *klass)
    * of the #GtkGLArea should be redrawn.
    *
    * The @context is bound to the @area prior to emitting this function,
-   * and the buffers are flushed once the emission terminates.
+   * and the buffers are painted to the window once the emission terminates.
    *
    * Returns: %TRUE to stop other handlers from being invoked for the event.
    *   %FALSE to propagate the event further.
    *
-   * Since: 3.14
+   * Since: 3.16
    */
   area_signals[RENDER] =
     g_signal_new (I_("render"),
@@ -500,7 +484,7 @@ gtk_gl_area_init (GtkGLArea *self)
  *
  * Returns: (transfer full): the newly created #GtkGLArea
  *
- * Since: 3.14
+ * Since: 3.16
  */
 GtkWidget *
 gtk_gl_area_new (void)
@@ -509,6 +493,14 @@ gtk_gl_area_new (void)
                        NULL);
 }
 
+/**
+ * gtk_gl_area_get_has_alpha:
+ * @area: a #GtkGLArea
+ *
+ * Returns: @true if the @area has an alpha component, @false otherwise
+ *
+ * Since: 3.16
+ */
 gboolean
 gtk_gl_area_get_has_alpha (GtkGLArea        *area)
 {
@@ -519,6 +511,20 @@ gtk_gl_area_get_has_alpha (GtkGLArea        *area)
   return priv->has_alpha;
 }
 
+/**
+ * gtk_gl_area_set_has_alpha:
+ * @area: a #GtkGLArea
+ * @has_alpha: a boolean
+ *
+ * If @has_alpha is #TRUE the buffer allocated by the widget will have an alpha channel component,
+ * and when rendering to the window the result will be composited over whatever is below
+ * the widget.
+ *
+ * If @has_alpha is #FALSE there will be no alpha channel, and the buffer will fully replace anything
+ * below the widget.
+ *
+ * Since: 3.16
+ */
 void
 gtk_gl_area_set_has_alpha (GtkGLArea        *area,
                            gboolean          has_alpha)
@@ -537,6 +543,14 @@ gtk_gl_area_set_has_alpha (GtkGLArea        *area,
     }
 }
 
+/**
+ * gtk_gl_area_get_has_depth_buffer:
+ * @area: a #GtkGLArea
+ *
+ * Returns: @true if the @area has an depth buffer, @false otherwise
+ *
+ * Since: 3.16
+ */
 gboolean
 gtk_gl_area_get_has_depth_buffer (GtkGLArea        *area)
 {
@@ -547,6 +561,16 @@ gtk_gl_area_get_has_depth_buffer (GtkGLArea        *area)
   return priv->has_depth_buffer;
 }
 
+/**
+ * gtk_gl_area_set_has_depth_buffer:
+ * @area: a #GtkGLArea
+ * @has_depth_buffer: a boolean
+ *
+ * If @has_depth_buffer is #TRUE the widget will allocate and enable a depth buffer for the target
+ * framebuffer. Otherwise there will be none.
+ *
+ * Since: 3.16
+ */
 void
 gtk_gl_area_set_has_depth_buffer (GtkGLArea        *area,
                                   gboolean          has_depth_buffer)
@@ -573,7 +597,7 @@ gtk_gl_area_set_has_depth_buffer (GtkGLArea        *area,
  *
  * Returns: (transfer none): the #GdkGLContext
  *
- * Since: 3.14
+ * Since: 3.16
  */
 GdkGLContext *
 gtk_gl_area_get_context (GtkGLArea *area)
@@ -599,7 +623,7 @@ gtk_gl_area_get_context (GtkGLArea *area)
  * Returns: %TRUE if the context was associated successfully with
  *  the widget
  *
- * Since: 3.14
+ * Since: 3.16
  */
 gboolean
 gtk_gl_area_make_current (GtkGLArea *area)

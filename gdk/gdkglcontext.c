@@ -26,76 +26,31 @@
  * #GdkGLContext is an object representing the platform-specific
  * OpenGL drawing context.
  *
- * #GdkGLContexts are created via a #GdkDisplay by specifying a
- * #GdkGLPixelFormat to be used by the OpenGL context.
+ * #GdkGLContexts are created for a #GdkWindow using gdk_window_create_gl_context(), and
+ * the context will be tied to the native window backing that window, matching the
+ * GdkVisual of the window.
  *
- * Support for #GdkGLContext is platform specific; in order to
- * discover if the platform supports OpenGL, you should use the
- * #GdkGLPixelFormat class.
+ * A #GdkGLContexts normal framebuffer draws directly on to the back buffer of the native
+ * window backing the #GdkWindow, so its not allowed to draw directly to that, as the
+ * gdk repaint system is in full control of that. Instead you can create render buffers
+ * or textures and use gdk_cairo_draw_from_gl() in the draw function of your widget
+ * to draw them. Then Gdk will handle the integration of your rendering with that of
+ * other widgets.
  *
- * A #GdkGLContext has to be associated with a #GdkWindow and
- * made "current", otherwise any OpenGL call will be ignored.
+ * Support for #GdkGLContext is platform specific, context creation can fail, returning
+ * a %NULL context.
+ *
+ * A #GdkGLContext has to be made "current" in order to start using
+ * it, otherwise any OpenGL call will be ignored.
  *
  * ## Creating a new OpenGL context ##
  *
  * In order to create a new #GdkGLContext instance you need a
- * #GdkGLPixelFormat instance and a #GdkDisplay.
- *
- * The #GdkGLPixelFormat class contains configuration option that
- * you require from the windowing system to be available on the
- * #GdkGLContext.
- *
- * |[<!-- language="C" -->
- *   GdkGLPixelFormat *format;
- *
- *   format = gdk_gl_pixel_format_new ("double-buffer", TRUE,
- *                                     "depth-size", 32,
- *                                     NULL);
- * ]|
- *
- * The example above will create a pixel format with double buffering
- * and a depth buffer size of 32 bits.
- *
- * You can either choose to validate the pixel format, in case you
- * have the ability to change your drawing code depending on it, or
- * just ask the #GdkDisplay to create the #GdkGLContext with it, which
- * will implicitly validate the pixel format and return an error if it
- * could not find an OpenGL context that satisfied the requirements
- * of the pixel format:
- *
- * |[<!-- language="C" -->
- *   GError *error = NULL;
- *
- *   // the "display" variable has been set elsewhere
- *   GdkGLContext *context =
- *     gdk_display_create_gl_context (display, format, &error);
- *
- *   if (error != NULL)
- *     {
- *       // handle error condition
- *     }
- *
- *   // you can release the reference on the pixel format at
- *   // this point
- *   g_object_unref (format);
- * ]|
+ * #GdkWindow, which you typically get during the realize call of a widget.
  *
  * ## Using a GdkGLContext ##
  *
- * In order to use a #GdkGLContext to draw with OpenGL commands
- * on a #GdkWindow, it's necessary to bind the context to the
- * window:
- *
- * |[<!-- language="C" -->
- *   // associates the window to the context
- *   gdk_gl_context_set_window (context, window);
- * ]|
- *
- * This ensures that the #GdkGLContext can refer to the #GdkWindow,
- * as well as the #GdkWindow can present the result of the OpenGL
- * commands.
- *
- * You will also need to make the #GdkGLContext the current context
+ * You will need to make the #GdkGLContext the current context
  * before issuing OpenGL calls; the system sends OpenGL commands to
  * whichever context is current. It is possible to have multiple
  * contexts, so you always need to ensure that the one which you
@@ -106,17 +61,6 @@
  * ]|
  *
  * You can now perform your drawing using OpenGL commands.
- *
- * Once you finished drawing your frame, and you want to present the
- * result on the window bound to the #GdkGLContext, you should call
- * gdk_gl_context_flush_buffer().
- *
- * If the #GdkWindow bound to the #GdkGLContext changes size, you
- * will need to call gdk_gl_context_update() to ensure that the OpenGL
- * viewport is kept in sync with the size of the window.
- *
- * You can detach the currently bound #GdkWindow from a #GdkGLContext
- * by using gdk_gl_context_set_window() with a %NULL argument.
  *
  * You can check which #GdkGLContext is the current one by using
  * gdk_gl_context_get_current(); you can also unset any #GdkGLContext
@@ -235,9 +179,9 @@ gdk_gl_context_class_init (GdkGLContextClass *klass)
   /**
    * GdkGLContext:window:
    *
-   * The #GdkWindow the gl context is bound to the context.
+   * The #GdkWindow the gl context is bound to.
    *
-   * Since: 3.14
+   * Since: 3.16
    */
   obj_pspecs[PROP_WINDOW] =
     g_param_spec_object ("window",
@@ -253,7 +197,7 @@ gdk_gl_context_class_init (GdkGLContextClass *klass)
    *
    * The #GdkVisual matching the pixel format used by the context.
    *
-   * Since: 3.14
+   * Since: 3.16
    */
   obj_pspecs[PROP_VISUAL] =
     g_param_spec_object ("visual",
@@ -284,7 +228,7 @@ gdk_gl_context_init (GdkGLContext *self)
  *
  * Returns: (transfer none): the #GdkVisual
  *
- * Since: 3.14
+ * Since: 3.16
  */
 GdkVisual *
 gdk_gl_context_get_visual (GdkGLContext *context)
@@ -296,24 +240,19 @@ gdk_gl_context_get_visual (GdkGLContext *context)
   return priv->visual;
 }
 
-/**
+/*< private >
  * gdk_gl_context_flush_buffer:
  * @context: a #GdkGLContext
+ * @painted: The area that has been redrawn this frame
+ * @damage: The area that we know is actually different from the last frame
  *
  * Copies the back buffer to the front buffer.
- *
- * If the #GdkGLContext is not double buffered, this function does not
- * do anything.
- *
- * Depending on the value of the #GdkGLContext:swap-interval property,
- * the copy may take place during the vertical refresh of the display
- * rather than immediately.
  *
  * This function may call `glFlush()` implicitly before returning; it
  * is not recommended to call `glFlush()` explicitly before calling
  * this function.
  *
- * Since: 3.14
+ * Since: 3.16
  */
 void
 gdk_gl_context_flush_buffer (GdkGLContext *context,
@@ -333,7 +272,7 @@ gdk_gl_context_flush_buffer (GdkGLContext *context,
  *
  * Returns: %TRUE if the context is current
  *
- * Since: 3.14
+ * Since: 3.16
  */
 gboolean
 gdk_gl_context_make_current (GdkGLContext *context)
@@ -353,7 +292,7 @@ gdk_gl_context_make_current (GdkGLContext *context)
  *
  * Returns: (transfer none): a #GdkWindow or %NULL
  *
- * Since: 3.14
+ * Since: 3.16
  */
 GdkWindow *
 gdk_gl_context_get_window (GdkGLContext *context)
@@ -373,7 +312,7 @@ gdk_gl_context_get_window (GdkGLContext *context)
  * Any OpenGL call after this function returns will be ignored
  * until gdk_gl_context_make_current() is called.
  *
- * Since: 3.14
+ * Since: 3.16
  */
 void
 gdk_gl_context_clear_current (void)
@@ -390,7 +329,7 @@ gdk_gl_context_clear_current (void)
  *
  * Returns: (transfer none): the current #GdkGLContext, or %NULL
  *
- * Since: 3.14
+ * Since: 3.16
  */
 GdkGLContext *
 gdk_gl_context_get_current (void)
