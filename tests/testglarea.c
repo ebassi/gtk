@@ -15,17 +15,100 @@ static float rotation_angles[N_AXIS] = { 0.0 };
 
 static GtkWidget *gl_area;
 
+static const GLfloat points[] = {
+   0.0f,  0.6f, 0.f,
+  -0.2f, -0.3f, 0.f,
+   0.2f,  0.3f, 0.f,
+};
+
+static int n_points = G_N_ELEMENTS (points);
+
+static void
+init_buffers (GLuint *vbuffer)
+{
+  glGenBuffers (1, vbuffer);
+  glBindBuffer (GL_ARRAY_BUFFER, *vbuffer);
+  glBufferData (GL_ARRAY_BUFFER, sizeof (GLfloat), points, GL_STATIC_DRAW);
+}
+
+static GLuint
+create_shader (int type, const char *src)
+{
+  GLuint shader;
+  int status;
+
+  shader = glCreateShader (type);
+  glShaderSource (shader, 1, &code, NULL);
+  glCompileShader (shader);
+
+  glGetShaderiv (shader, GL_COMPILE_STATUS, &status);
+  if (status == GL_FALSE)
+    {
+      int log_len;
+      char *buffer;
+
+      glGetShaderiv (shader, GL_INFO_LOG_LENGTH, &log_len);
+
+      buffer = g_malloc (log_len + 1);
+      glGetShaderInfoLog (shader, log_len, NULL, buffer);
+
+      g_warning ("Compile failure in %s shader:\n%s\n",
+                 type == GL_VERTEX_SHADER ? "vertex" : "fragment",
+                 buffer);
+
+      g_free (buffer);
+
+      glDeleteShader (shader);
+
+      return 0;
+    }
+
+  return shader;
+}
+
+static const char *vertex_shader_code;
+
+static void
+init_shaders (GLuint *vertex,
+              GLuint *fragment)
+{
+  *vertex = create_shader (GL_VERTEX_SHADER, vertex_shader_code);
+}
+
+static GLuint position_buffer;
+static GLuint vertex_shader;
+static GLuint fragment_shader;
+static GLuint program;
+
+static void
+realize (GtkWidget *widget)
+{
+  init_shaders (&vertex_shader, &fragment_shader, &program);
+  init_buffers (&position_buffer);
+}
+
+static void
+unrealize (GtkWidget *widget)
+{
+  glDeleteBuffers (1, &position_buffer);
+  glDeleteShader (vertex_shader);
+  glDeleteShader (fragment_shader);
+  glDeleteProgram (program);
+}
+
 static void
 draw_triangle (void)
 {
-  glColor3f (1.0f, 0.85f, 0.35f);
-  glBegin (GL_TRIANGLES);
-  {
-    glVertex3f ( 0.0,  0.6,  0.0);
-    glVertex3f (-0.2, -0.3,  0.0);
-    glVertex3f ( 0.2, -0.3,  0.0);
-  }
-  glEnd ();
+  glUseProgram (program);
+
+  glBindBuffer (GL_ARRAY_BUFFER, position_buffer);
+  glEnableVertexAttribArray (0);
+  glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+  glDrawArrays (GL_TRIANGLE, 0, 3);
+
+  glDisableVertexAttribArray (0);
+  glUseProgram (0);
 }
 
 static gboolean
@@ -134,6 +217,7 @@ main (int argc, char *argv[])
   gtk_widget_set_hexpand (gl_area, TRUE);
   gtk_widget_set_vexpand (gl_area, TRUE);
   gtk_container_add (GTK_CONTAINER (box), gl_area);
+  g_signal_connect (gl_area, "realize", G_CALLBACK (realize), NULL);
   g_signal_connect (gl_area, "render", G_CALLBACK (render), NULL);
   gtk_widget_show (gl_area);
 
