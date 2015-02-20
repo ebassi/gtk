@@ -37,14 +37,30 @@ CLEANFILES =
 
 lib_LTLIBRARIES =
 
-gsk_public_source_h =
-gsk_private_source_h =
+gsk_public_source_h = \
+	gskdebug.h \
+	gsklayer.h \
+	gsklayeriter.h \
+	gskmacros.h \
+	gsktypes.h
+
+gsk_private_source_h = \
+	gsklayerprivate.h
+
 gsk_private_source_c =
-gsk_source_c =
+
+gsk_source_c = \
+	gskdebug.c \
+	gsklayer.c \
+	gsklayeriter.c \
+	gsklayerstate.c
+
+all_sources = $(gsk_private_source_c) $(gsk_source_c) $(gsk_public_source_h) $(gsk_private_source_h) $(BUILT_SOURCES)
 
 libgsk_3_la_SOURCES = $(all_sources)
 libgsk_3_la_CFLAGS = $(AM_CFLAGS) $(GDK_HIDDEN_VISIBILITY_CFLAGS)
 libgsk_3_la_LIBADD = $(GSK_DEP_LIBS) $(top_builddir)/gdk/libgdk-3.la
+libgsk_3_la_DEPENDENCIES = $(top_builddir)/gdk/libgdk-3.la
 libgsk_3_la_LDFLAGS = $(LDADD)
 
 lib_LTLIBRARIES += libgsk-3.la
