@@ -18,6 +18,7 @@ AM_CPPFLAGS =						\
 	-I$(top_builddir)				\
 	-I$(top_builddir)/gtk				\
 	-I$(top_srcdir) 				\
+	-I$(top_srcdir)/gsk				\
 	-I$(top_srcdir)/gdk				\
 	$(GMODULE_CFLAGS)				\
 	$(GTK_DEBUG_FLAGS)				\
@@ -67,10 +68,12 @@ endif
 
 libadd = 				\
 	$(top_builddir)/gdk/libgdk-3.la	\
+	$(top_builddir)/gsk/libgsk-3.la \
 	$(GMODULE_LIBS) 		\
 	$(GTK_DEP_LIBS)
 deps = 					\
-	$(top_builddir)/gdk/libgdk-3.la
+	$(top_builddir)/gdk/libgdk-3.la \
+	$(top_builddir)/gsk/libgsk-3.la
 
 # libtool stuff: set version and export symbols for resolving
 # since automake doesn't support conditionalized libsomething_la_LDFLAGS
@@ -1391,12 +1394,15 @@ INTROSPECTION_SCANNER_ENV = CC="$(CC)"
 INTROSPECTION_COMPILER_ARGS = \
 	--includedir=$(srcdir) \
 	--includedir=. \
-	--includedir=../gdk
+	--includedir=../gdk \
+	--includedir=../gsk
 
-Gtk-3.0.gir: $(INTROSPECTION_SCANNER) libgtk-3.la $(top_builddir)/gdk/Gdk-3.0.gir Makefile
+Gtk-3.0.gir: $(INTROSPECTION_SCANNER) libgtk-3.la $(top_builddir)/gsk/Gsk-3.0.gir $(top_builddir)/gdk/Gdk-3.0.gir Makefile
 Gtk_3_0_gir_SCANNERFLAGS = 			\
 	--warn-all				\
+	--add-include-path=$(top_builddir)/gsk  \
 	--add-include-path=$(top_builddir)/gdk	\
+	--include-uninstalled=$(top_builddir)/gsk/Gsk-3.0.gir \
 	--include-uninstalled=$(top_builddir)/gdk/Gdk-3.0.gir
 Gtk_3_0_gir_INCLUDES = Atk-1.0
 if USE_X11
@@ -1407,7 +1413,7 @@ Gtk_3_0_gir_CFLAGS = \
 		$(AM_CPPFLAGS) \
 		-DGTK_TEXT_USE_INTERNAL_UNSUPPORTED_API
 Gtk_3_0_gir_FILES = $(introspection_files)
-Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la
+Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la $(top_builddir)/gsk/libgsk-3.la
 Gtk_3_0_gir_EXPORT_PACKAGES = gtk+-3.0
 INTROSPECTION_GIRS = Gtk-3.0.gir
 
@@ -1434,6 +1440,7 @@ bin_PROGRAMS = \
 gtk_query_immodules_3_0_SOURCES = queryimmodules.c
 gtk_query_immodules_3_0_LDADD = 		\
 	libgtk-3.la				\
+	$(top_builddir)/gsk/libgsk-3.la		\
 	$(top_builddir)/gdk/libgdk-3.la		\
 	$(GMODULE_LIBS)				\
 	$(GTK_DEP_LIBS)
@@ -1444,12 +1451,14 @@ gtk_update_icon_cache_LDADD = $(GDK_PIXBUF_LIBS)
 gtk_encode_symbolic_svg_SOURCES = encodesymbolic.c
 gtk_encode_symbolic_svg_LDADD =			\
 	$(GDK_PIXBUF_LIBS)			\
+	$(top_builddir)/gsk/libgsk-3.la		\
 	$(top_builddir)/gdk/libgdk-3.la		\
 	$(GTK_DEP_LIBS)
 
 gtk_builder_tool_SOURCES = gtk-builder-tool.c
 gtk_builder_tool_LDADD =			\
 	libgtk-3.la				\
+	$(top_builddir)/gsk/libgsk-3.la		\
 	$(top_builddir)/gdk/libgdk-3.la		\
 	$(GTK_DEP_LIBS)
 
@@ -1462,6 +1471,7 @@ gtk_query_settings_LDADD= 			\
 gtk_launch_SOURCES = gtk-launch.c
 gtk_launch_LDADD =				\
 	libgtk-3.la				\
+	$(top_builddir)/gsk/libgsk-3.la		\
 	$(top_builddir)/gdk/libgdk-3.la		\
 	$(GTK_DEP_LIBS)
 
