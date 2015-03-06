@@ -17,6 +17,7 @@ AM_CPPFLAGS =						\
 	-I$(top_builddir)				\
 	-I$(top_builddir)/gtk				\
 	-I$(top_srcdir) 				\
+	-I$(top_srcdir)/gsk				\
 	-I$(top_srcdir)/gdk				\
 	$(GMODULE_CFLAGS)				\
 	$(GTK_DEBUG_FLAGS)				\
@@ -66,9 +67,11 @@ endif
 
 libadd = 				\
 	$(top_builddir)/gdk/libgdk-3.la	\
+	$(top_builddir)/gsk/libgsk-3.la \
 	$(GMODULE_LIBS) 		\
 	$(GTK_DEP_LIBS)
 deps = 					\
+	$(top_builddir)/gsk/libgsk-3.la \
 	$(top_builddir)/gdk/libgdk-3.la
 
 # libtool stuff: set version and export symbols for resolving
@@ -1357,10 +1360,12 @@ INTROSPECTION_COMPILER_ARGS = \
 	--includedir=. \
 	--includedir=../gdk
 
-Gtk-3.0.gir: $(INTROSPECTION_SCANNER) libgtk-3.la $(top_builddir)/gdk/Gdk-3.0.gir Makefile
+Gtk-3.0.gir: $(INTROSPECTION_SCANNER) libgtk-3.la $(top_builddir)/gsk/Gsk-3.0.gir $(top_builddir)/gdk/Gdk-3.0.gir Makefile
 Gtk_3_0_gir_SCANNERFLAGS = 			\
 	--warn-all				\
+	--add-include-path=$(top_builddir)/gsk  \
 	--add-include-path=$(top_builddir)/gdk	\
+	--include-uninstalled=$(top_builddir)/gsk/Gsk-3.0.gir \
 	--include-uninstalled=$(top_builddir)/gdk/Gdk-3.0.gir
 Gtk_3_0_gir_INCLUDES = Atk-1.0
 if USE_X11
@@ -1371,7 +1376,7 @@ Gtk_3_0_gir_CFLAGS = \
 		$(AM_CPPFLAGS) \
 		-DGTK_TEXT_USE_INTERNAL_UNSUPPORTED_API
 Gtk_3_0_gir_FILES = $(introspection_files)
-Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la
+Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la $(top_builddir)/gsk/libgsk-3.0.la
 Gtk_3_0_gir_EXPORT_PACKAGES = gtk+-3.0
 INTROSPECTION_GIRS = Gtk-3.0.gir
 
