@@ -26,6 +26,7 @@
 #include <gsk/gskdebug.h>
 #include <gsk/gsklayer.h>
 #include <gsk/gsklayeriter.h>
+#include <gsk/gskrenderer.h>
 
 #undef __GSK_H_INSIDE__
 
