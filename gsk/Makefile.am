@@ -42,6 +42,7 @@ gsk_public_source_h = \
 	gsklayer.h \
 	gsklayeriter.h \
 	gskmacros.h \
+	gskrenderer.h \
 	gsktypes.h
 
 gsk_private_source_h = \
@@ -53,7 +54,8 @@ gsk_source_c = \
 	gskdebug.c \
 	gsklayer.c \
 	gsklayeriter.c \
-	gsklayerstate.c
+	gsklayerstate.c \
+	gskrenderer.c
 
 all_sources = $(gsk_private_source_c) $(gsk_source_c) $(gsk_public_source_h) $(gsk_private_source_h) $(BUILT_SOURCES)
 
