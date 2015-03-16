@@ -205,6 +205,16 @@ gtk_drawing_area_size_allocate (GtkWidget     *widget,
                                 allocation->x, allocation->y,
                                 allocation->width, allocation->height);
 
+      if (gtk_widget_get_has_layer (widget))
+        {
+          graphene_rect_t bounds;
+
+          graphene_rect_init (&bounds, 
+                              0, 0,
+                              allocation->width, allocation->height);
+          gsk_layer_set_bounds (gtk_widget_get_layer (widget), &bounds);
+        }
+
       gtk_drawing_area_send_configure (GTK_DRAWING_AREA (widget));
     }
 }
