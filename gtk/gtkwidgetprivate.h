@@ -89,6 +89,9 @@ struct _GtkWidgetPrivate
   /* SizeGroup related flags */
   guint have_size_groups      : 1;
 
+  /* GSK related flags */
+  guint has_layer             : 1;
+
   /* Alignment */
   guint   halign              : 4;
   guint   valign              : 4;
@@ -153,6 +156,9 @@ struct _GtkWidgetPrivate
   GtkWidget *parent;
 
   GList *event_controllers;
+
+  /* The GSK root layer */
+  GskLayer *layer;
 };
 
 GtkCssNode *  gtk_widget_get_css_node       (GtkWidget *widget);

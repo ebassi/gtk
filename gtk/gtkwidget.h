@@ -30,6 +30,7 @@
 #endif
 
 #include <gdk/gdk.h>
+#include <gsk/gsk.h>
 #include <gtk/gtkaccelgroup.h>
 #include <gtk/gtkborder.h>
 #include <gtk/gtktypes.h>
@@ -918,6 +919,14 @@ void                  gtk_widget_register_window        (GtkWidget    *widget,
 GDK_AVAILABLE_IN_3_8
 void                  gtk_widget_unregister_window      (GtkWidget    *widget,
                                                          GdkWindow    *window);
+
+GDK_AVAILABLE_IN_3_18
+void                  gtk_widget_set_has_layer          (GtkWidget    *widget,
+                                                         gboolean      has_layer);
+GDK_AVAILABLE_IN_3_18
+gboolean              gtk_widget_get_has_layer          (GtkWidget    *widget);
+GDK_AVAILABLE_IN_3_18
+GskLayer *            gtk_widget_get_layer              (GtkWidget    *widget);
 
 GDK_AVAILABLE_IN_ALL
 int                   gtk_widget_get_allocated_width    (GtkWidget     *widget);

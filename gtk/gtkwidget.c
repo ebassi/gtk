@@ -5447,6 +5447,9 @@ gtk_widget_realize (GtkWidget *widget)
       gtk_widget_connect_frame_clock (widget,
                                       gtk_widget_get_frame_clock (widget));
 
+      if (priv->has_layer && priv->layer != NULL)
+        gsk_layer_set_frame_clock (priv->layer, gtk_widget_get_frame_clock (widget));
+
       gtk_widget_pop_verify_invariants (widget);
     }
 }
@@ -6342,13 +6345,25 @@ gtk_widget_real_size_allocate (GtkWidget     *widget,
 
   gtk_widget_set_allocation (widget, allocation);
 
-  if (_gtk_widget_get_realized (widget) &&
-      _gtk_widget_get_has_window (widget))
-     {
-	gdk_window_move_resize (priv->window,
-				allocation->x, allocation->y,
-				allocation->width, allocation->height);
-     }
+  if (gtk_widget_get_realized (widget))
+    {
+      if (gtk_widget_get_has_window (widget))
+        {
+	  gdk_window_move_resize (priv->window,
+                                  allocation->x, allocation->y,
+                                  allocation->width, allocation->height);
+        }
+
+      if (gtk_widget_get_has_layer (widget) && priv->layer != NULL)
+        {
+          graphene_rect_t bounds;
+
+          graphene_rect_init (&bounds,
+                              0, 0,
+                              allocation->width, allocation->height);
+          gsk_layer_set_bounds (priv->layer, &bounds);
+        }
+    }
 }
 
 /* translate initial/final into start/end */
@@ -6918,6 +6933,28 @@ gtk_cairo_should_draw_window (cairo_t *cr,
 }
 
 static void
+_gtk_widget_draw_layer (GtkWidget *widget,
+                        cairo_t   *cr,
+                        GdkWindow *window)
+{
+  GskRenderer *renderer = gsk_renderer_new (widget->priv->layer);
+  graphene_rect_t viewport;
+
+  graphene_rect_init (&viewport,
+                      widget->priv->allocation.x,
+                      widget->priv->allocation.y,
+                      widget->priv->allocation.width,
+                      widget->priv->allocation.height);
+
+  gsk_renderer_set_viewport (renderer, &viewport);
+  gsk_renderer_render (renderer, cr,
+                       widget->priv->allocation.width,
+                       widget->priv->allocation.height);
+
+  g_object_unref (renderer);
+}
+
+static void
 _gtk_widget_draw_internal (GtkWidget *widget,
                            cairo_t   *cr,
                            gboolean   clip_to_size,
@@ -6959,6 +6996,9 @@ _gtk_widget_draw_internal (GtkWidget *widget,
           GTK_WIDGET_GET_CLASS (widget)->draw (widget, cr);
           cairo_restore (cr);
         }
+
+      if (gtk_widget_get_has_layer (widget))
+        _gtk_widget_draw_layer (widget, cr, window);
 
 #ifdef G_ENABLE_DEBUG
       if (GTK_DEBUG_CHECK (BASELINES))
@@ -9187,6 +9227,115 @@ gtk_widget_get_has_window (GtkWidget *widget)
   g_return_val_if_fail (GTK_IS_WIDGET (widget), FALSE);
 
   return ! widget->priv->no_window;
+}
+
+/**
+ * gtk_widget_set_has_layer:
+ * @widget: a #GskLayer
+ * @has_layer: %TRUE if the widget uses GSK layers
+ *
+ * Sets whether @widget will use GSK layers when drawing.
+ *
+ * If @has_layer is %TRUE, you can use gtk_widget_get_layer() to retrieve
+ * the root #GskLayer and build a scene graph using the #GskLayer API.
+ *
+ * The widget will render the contents of the scene graph during the
+ * emission of the #GtkWidget::draw signal.
+ *
+ * Since: 3.18
+ */
+void
+gtk_widget_set_has_layer (GtkWidget *widget,
+                          gboolean   has_layer)
+{
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  widget->priv->has_layer = !!has_layer;
+}
+
+/**
+ * gtk_widget_get_has_layer:
+ * @widget: a #GtkWidget
+ *
+ * Checks whether @widget uses GSK layers when drawing.
+ *
+ * Returns: %TRUE if the widget uses GSK layers
+ *
+ * Since: 3.18
+ */
+gboolean
+gtk_widget_get_has_layer (GtkWidget *widget)
+{
+  g_return_val_if_fail (GTK_IS_WIDGET (widget), FALSE);
+
+  return widget->priv->has_layer;
+}
+
+/**
+ * gtk_widget_get_layer:
+ * @widget: a #GtkWidget
+ *
+ * Retrieves the root #GskLayer used by @widget, or %NULL if the widget
+ * does not use layers.
+ *
+ * You can use the layer returned by this function to build your scene
+ * graph; the scene will be rendered every time the @widget draws itself.
+ *
+ * The returned #GskLayer has its #GskLayer:bounds set to the same size
+ * as the widget, and the #GskLayer:frame with an origin in (0, 0). The
+ * background color of the layer is transparent.
+ *
+ * Returns: (transfer none): the root layer of the scene, or %NULL
+ *
+ * Since: 3.18
+ */
+GskLayer *
+gtk_widget_get_layer (GtkWidget *widget)
+{
+  GdkRGBA transparent = { 0, 0, 0, 0 };
+
+  g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
+
+  if (!widget->priv->has_layer)
+    return NULL;
+
+  if (widget->priv->layer != NULL)
+    {
+      if (widget->priv->realized)
+        gsk_layer_set_frame_clock (widget->priv->layer, gtk_widget_get_frame_clock (widget));
+
+      return widget->priv->layer;
+    }
+
+  widget->priv->layer = gsk_layer_new ();
+  g_object_ref_sink (widget->priv->layer);
+
+  /* Initialize the layer */
+  if (!widget->priv->alloc_needed)
+    {
+      graphene_rect_t bounds;
+
+      graphene_rect_init (&bounds,
+                          widget->priv->allocation.x,
+                          widget->priv->allocation.y,
+                          widget->priv->allocation.width,
+                          widget->priv->allocation.height);
+      gsk_layer_set_bounds (widget->priv->layer, &bounds);
+    }
+
+  gsk_layer_set_background_color (widget->priv->layer, &transparent);
+
+  if (widget->priv->realized)
+    gsk_layer_set_frame_clock (widget->priv->layer, gtk_widget_get_frame_clock (widget));
+
+  g_signal_connect_swapped (widget->priv->layer, "queue-relayout",
+                            G_CALLBACK (gtk_widget_queue_resize),
+                            widget);
+  g_signal_connect_swapped (widget->priv->layer, "queue-redraw",
+                            G_CALLBACK (gtk_widget_queue_draw),
+                            widget);
+
+  return widget->priv->layer;
 }
 
 /**
@@ -12135,6 +12284,8 @@ gtk_widget_dispose (GObject *object)
   else if (_gtk_widget_get_visible (widget))
     gtk_widget_hide (widget);
 
+  g_clear_object (&priv->layer);
+
   priv->visible = FALSE;
   if (_gtk_widget_get_realized (widget))
     gtk_widget_unrealize (widget);
@@ -12453,6 +12604,15 @@ gtk_widget_real_realize (GtkWidget *widget)
     {
       priv->window = gtk_widget_get_parent_window (widget);
       g_object_ref (priv->window);
+    }
+
+  if (priv->has_layer)
+    {
+      GskLayer *layer = gtk_widget_get_layer (widget);
+      graphene_rect_t bounds;
+
+      graphene_rect_init (&bounds, 0, 0, priv->allocation.width, priv->allocation.height);
+      gsk_layer_set_bounds (layer, &bounds);
     }
 }
 
