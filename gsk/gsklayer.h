@@ -175,10 +175,6 @@ GDK_AVAILABLE_IN_3_18
 void                    gsk_layer_get_position                  (GskLayer               *self,
                                                                  graphene_point_t       *position);
 
-GDK_AVAILABLE_IN_3_18
-void                    gsk_layer_get_preferred_size            (GskLayer               *self,
-                                                                 graphene_size_t        *size);
-
 /* Transformations */
 
 GDK_AVAILABLE_IN_3_18
@@ -217,6 +213,18 @@ void                    gsk_layer_get_child_transform           (GskLayer       
 GDK_AVAILABLE_IN_3_18
 void                    gsk_layer_set_frame_clock               (GskLayer                 *self,
                                                                  GdkFrameClock            *frame_clock);
+
+/* Layout */
+
+GDK_AVAILABLE_IN_3_18
+void                    gsk_layer_get_preferred_size            (GskLayer               *self,
+                                                                 graphene_size_t        *size);
+
+GDK_AVAILABLE_IN_3_18
+void                    gsk_layer_set_layout_manager            (GskLayer               *self,
+                                                                 GskLayoutManager       *manager);
+GDK_AVAILABLE_IN_3_18
+GskLayoutManager *      gsk_layer_get_layout_manager            (GskLayer               *self);
 
 G_END_DECLS
 
