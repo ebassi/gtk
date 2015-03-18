@@ -41,6 +41,7 @@ gsk_public_source_h = \
 	gskdebug.h \
 	gsklayer.h \
 	gsklayeriter.h \
+	gsklayoutconstraint.h \
 	gsklayoutmanager.h \
 	gskmacros.h \
 	gskrenderer.h \
@@ -56,6 +57,7 @@ gsk_source_c = \
 	gsklayer.c \
 	gsklayeriter.c \
 	gsklayerstate.c \
+	gsklayoutconstraint.c \
 	gsklayoutmanager.c \
 	gskrenderer.c
 

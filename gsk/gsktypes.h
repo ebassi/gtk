@@ -33,6 +33,7 @@ typedef struct _GskLayer                GskLayer;
 typedef struct _GskLayerIter            GskLayerIter;
 typedef struct _GskRenderer             GskRenderer;
 typedef struct _GskLayoutManager        GskLayoutManager;
+typedef struct _GskLayoutConstraint     GskLayoutConstraint;
 
 G_END_DECLS
 
