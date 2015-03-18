@@ -26,6 +26,7 @@
 #include "config.h"
 
 #include "gsklayerprivate.h"
+#include "gsklayoutmanager.h"
 #include "gskdebug.h"
 
 /**
@@ -57,6 +58,8 @@ typedef struct {
   GskLayerState model;
 
   GdkFrameClock *frame_clock;
+
+  GskLayoutManager *layout_manager;
 
   /* Bitfields: keep at the end */
   guint hidden : 1;
@@ -179,6 +182,11 @@ static gboolean
 gsk_layer_real_queue_relayout (GskLayer *self,
                                GskLayer *origin)
 {
+  GskLayerPrivate *priv = gsk_layer_get_instance_private (self);
+
+  if (priv->layout_manager != NULL)
+    return gsk_layout_manager_queue_relayout (priv->layout_manager, self, origin);
+
   return TRUE;
 }
 
@@ -186,11 +194,17 @@ static void
 gsk_layer_real_get_preferred_size (GskLayer        *self,
                                    graphene_size_t *size)
 {
-  const GeometryInfo *info;
+  GskLayerPrivate *priv = gsk_layer_get_instance_private (self);
 
-  info = gsk_layer_state_peek_geometry_info (gsk_layer_get_state (self));
+  if (priv->layout_manager == NULL)
+    {
+      const GeometryInfo *info;
 
-  graphene_size_init_from_size (size, &info->bounds.size);
+      info = gsk_layer_state_peek_geometry_info (gsk_layer_get_state (self));
+      graphene_size_init_from_size (size, &info->bounds.size);
+    }
+  else
+    gsk_layout_manager_get_preferred_size (priv->layout_manager, self, size);
 }
 
 static gboolean
@@ -222,6 +236,10 @@ gsk_layer_real_draw (GskLayer *self,
 static void
 gsk_layer_real_layout_children (GskLayer *layer)
 {
+  GskLayerPrivate *priv = gsk_layer_get_instance_private (layer);
+
+  if (priv->layout_manager != NULL)
+    gsk_layout_manager_layout_children (priv->layout_manager, layer);
 }
 
 static void
@@ -1771,4 +1789,27 @@ gsk_layer_set_frame_clock (GskLayer *self,
           gsk_layer_queue_relayout (self);
         }
     }
+}
+
+void
+gsk_layer_set_layout_manager (GskLayer         *self,
+                              GskLayoutManager *manager)
+{
+  GskLayerPrivate *priv = gsk_layer_get_instance_private (self);
+
+  g_return_if_fail (GSK_IS_LAYER (self));
+  g_return_if_fail (manager == NULL || GSK_IS_LAYOUT_MANAGER (manager));
+
+  if (g_set_object (&priv->layout_manager, manager))
+    {
+      gsk_layer_queue_relayout (self);
+    }
+}
+
+GskLayoutManager *
+gsk_layer_get_layout_manager (GskLayer *self)
+{
+  g_return_val_if_fail (GSK_IS_LAYER (self), NULL);
+
+  return GSK_LAYER_PRIV (self)->layout_manager;
 }
