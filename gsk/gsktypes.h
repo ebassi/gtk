@@ -29,9 +29,10 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GskLayer        GskLayer;
-typedef struct _GskLayerIter    GskLayerIter;
-typedef struct _GskRenderer     GskRenderer;
+typedef struct _GskLayer                GskLayer;
+typedef struct _GskLayerIter            GskLayerIter;
+typedef struct _GskRenderer             GskRenderer;
+typedef struct _GskLayoutManager        GskLayoutManager;
 
 G_END_DECLS
 
