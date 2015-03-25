@@ -26,6 +26,7 @@
 #include <graphene.h>
 #include <gdk/gdk.h>
 #include <gsk/gskmacros.h>
+#include <gsk/gskenums.h>
 
 G_BEGIN_DECLS
 

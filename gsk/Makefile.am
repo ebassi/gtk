@@ -17,7 +17,7 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)			\
 	-I$(top_builddir)/gsk			\
 	-I$(top_srcdir)				\
-	-I$(top_srcdir)/gdk			\
+	-I$(top_srcdir)/gsk			\
 	$(GTK_DEBUG_FLAGS)			\
 	$(GSK_DEP_CFLAGS)
 
@@ -39,6 +39,7 @@ lib_LTLIBRARIES =
 
 gsk_public_source_h = \
 	gskdebug.h \
+	gskenums.h \
 	gsklayer.h \
 	gsklayeriter.h \
 	gsklayoutmanager.h \
@@ -51,6 +52,12 @@ gsk_private_source_h = \
 
 gsk_private_source_c =
 
+gsk_public_built_source_h = \
+	gskenumtypes.h
+
+gsk_built_source_c = \
+	gskenumtypes.c
+
 gsk_source_c = \
 	gskdebug.c \
 	gsklayer.c \
@@ -58,6 +65,8 @@ gsk_source_c = \
 	gsklayerstate.c \
 	gsklayoutmanager.c \
 	gskrenderer.c
+
+BUILT_SOURCES += $(gsk_public_built_source_h) $(gsk_built_source_c)
 
 all_sources = $(gsk_private_source_c) $(gsk_source_c) $(gsk_public_source_h) $(gsk_private_source_h) $(BUILT_SOURCES)
 
@@ -69,8 +78,26 @@ libgsk_3_la_LDFLAGS = $(LDADD)
 
 lib_LTLIBRARIES += libgsk-3.la
 
+gskenumtypes.h: stamp-gskenumtypes.h
+	@true
+stamp-gskenumtypes.h: $(gsk_public_source_h) gskenumtypes.h.template
+	$(AM_V_GEN) $(GLIB_MKENUMS) \
+		--template gskenumtypes.h.template \
+		$(gsk_public_source_h) > xgen-geth \
+	&& ( cmp -s xgen-geth gskenumtypes.h || cp xgen-geth gskenumtypes.h ) \
+	&& rm -f xgen-geth \
+	&& echo timestamp > $(@F)
+gskenumtypes.c: $(gsk_public_source_h) gskenumtypes.c.template
+	$(AM_V_GEN) $(GLIB_MKENUMS) \
+		--template gskenumtypes.c.template \
+		$(gsk_public_source_h) > xgen-getc \
+	&& cp xgen-getc gskenumtypes.c \
+	&& rm -f xgen-getc
+
+CLEANFILES += stamp-gskenumtypes.h
+
 gskincludedir = $(includedir)/gtk-3.0/gsk
-gskinclude_HEADERS = $(gsk_public_source_h) gsk.h
+gskinclude_HEADERS = $(gsk_public_source_h) $(gsk_public_built_source_h) gsk.h
 
 if HAVE_INTROSPECTION
 
