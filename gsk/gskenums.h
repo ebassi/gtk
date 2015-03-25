@@ -15,27 +15,27 @@
  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __GSK_TYPES_H__
-#define __GSK_TYPES_H__
+#ifndef __GSK_ENUMS_H__
+#define __GSK_ENUMS_H__
 
 #if !defined (__GSK_H_INSIDE__) && !defined (GSK_COMPILATION)
 #error "Only <gsk/gsk.h> can be included directly."
 #endif
 
 #include <glib.h>
-#include <graphene.h>
-#include <gdk/gdk.h>
-#include <gsk/gskmacros.h>
-#include <gsk/gskenums.h>
 
 G_BEGIN_DECLS
 
-typedef struct _GskLayer                GskLayer;
-typedef struct _GskLayerIter            GskLayerIter;
-typedef struct _GskRenderer             GskRenderer;
-typedef struct _GskLayoutManager        GskLayoutManager;
-typedef struct _GskLayoutConstraint     GskLayoutConstraint;
+typedef enum {
+  GSK_LAYOUT_ATTRIBUTE_TOP,
+  GSK_LAYOUT_ATTRIBUTE_RIGHT,
+  GSK_LAYOUT_ATTRIBUTE_BOTTOM,
+  GSK_LAYOUT_ATTRIBUTE_LEFT,
+
+  GSK_LAYOUT_ATTRIBUTE_MIDDLE_X,
+  GSK_LAYOUT_ATTRIBUTE_MIDDLE_Y
+} GskLayoutAttribute;
 
 G_END_DECLS
 
-#endif /* __GSK_TYPES_H__ */
+#endif /* __GSK_ENUMS_H__ */

@@ -24,6 +24,8 @@
 #include <gsk/gskmacros.h>
 
 #include <gsk/gskdebug.h>
+#include <gsk/gskenums.h>
+#include <gsk/gskenumtypes.h>
 #include <gsk/gsklayer.h>
 #include <gsk/gsklayeriter.h>
 #include <gsk/gsklayoutconstraint.h>
