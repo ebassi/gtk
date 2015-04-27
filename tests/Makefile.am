@@ -107,6 +107,7 @@ noinst_PROGRAMS =  $(TEST_PROGS)	\
 	testrichtext			\
 	testscale			\
 	testscene			\
+	testscenelayout			\
 	testselection			\
 	testselectionmode		\
 	$(testsocket_programs)		\
