@@ -1358,7 +1358,8 @@ INTROSPECTION_SCANNER_ENV = CC="$(CC)"
 INTROSPECTION_COMPILER_ARGS = \
 	--includedir=$(srcdir) \
 	--includedir=. \
-	--includedir=../gdk
+	--includedir=../gdk \
+	--includedir=../gsk
 
 Gtk-3.0.gir: $(INTROSPECTION_SCANNER) libgtk-3.la $(top_builddir)/gsk/Gsk-3.0.gir $(top_builddir)/gdk/Gdk-3.0.gir Makefile
 Gtk_3_0_gir_SCANNERFLAGS = 			\
@@ -1376,7 +1377,7 @@ Gtk_3_0_gir_CFLAGS = \
 		$(AM_CPPFLAGS) \
 		-DGTK_TEXT_USE_INTERNAL_UNSUPPORTED_API
 Gtk_3_0_gir_FILES = $(introspection_files)
-Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la $(top_builddir)/gsk/libgsk-3.0.la
+Gtk_3_0_gir_LIBS = libgtk-3.la $(top_builddir)/gdk/libgdk-3.la $(top_builddir)/gsk/libgsk-3.la
 Gtk_3_0_gir_EXPORT_PACKAGES = gtk+-3.0
 INTROSPECTION_GIRS = Gtk-3.0.gir
 

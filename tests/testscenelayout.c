@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <gtk/gtk.h>
+
 static void
 build_scene (GskLayer *root)
 {
