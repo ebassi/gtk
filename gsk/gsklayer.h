@@ -130,23 +130,31 @@ void            gsk_layer_set_hidden                    (GskLayer *self,
                                                          gboolean  hidden);
 GDK_AVAILABLE_IN_3_18
 gboolean        gsk_layer_get_hidden                    (GskLayer *self);
+
+/* Content */
+
 GDK_AVAILABLE_IN_3_18
-void            gsk_layer_set_opacity                   (GskLayer *self,
+void                    gsk_layer_set_opacity           (GskLayer *self,
                                                          double    opacity);
 GDK_AVAILABLE_IN_3_18
-double          gsk_layer_get_opacity                   (GskLayer *self);
+double                  gsk_layer_get_opacity           (GskLayer *self);
 GDK_AVAILABLE_IN_3_18
-void            gsk_layer_set_background_color          (GskLayer *self,
+void                    gsk_layer_set_background_color  (GskLayer *self,
                                                          const GdkRGBA *bg_color);
 GDK_AVAILABLE_IN_3_18
-void            gsk_layer_get_background_color          (GskLayer *self,
+void                    gsk_layer_get_background_color  (GskLayer *self,
                                                          GdkRGBA *bg_color);
 GDK_AVAILABLE_IN_3_18
-void            gsk_layer_set_clip                      (GskLayer *self,
+void                    gsk_layer_set_clip              (GskLayer *self,
                                                          const graphene_rect_t *clip);
 GDK_AVAILABLE_IN_3_18
-void            gsk_layer_get_clip                      (GskLayer *self,
+void                    gsk_layer_get_clip              (GskLayer *self,
                                                          graphene_rect_t *clip);
+GDK_AVAILABLE_IN_3_18
+void                    gsk_layer_set_content           (GskLayer *self,
+                                                         GskLayerContent *content);
+GDK_AVAILABLE_IN_3_18
+GskLayerContent *       gsk_layer_get_content           (GskLayer *self);
 
 /* Geometry */
 

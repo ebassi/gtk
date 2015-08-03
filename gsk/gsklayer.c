@@ -26,6 +26,8 @@
 #include "config.h"
 
 #include "gsklayerprivate.h"
+
+#include "gsklayercontentprivate.h"
 #include "gsklayoutmanager.h"
 #include "gskdebug.h"
 
@@ -57,9 +59,19 @@ typedef struct {
   /* The target state of the layer */
   GskLayerState model;
 
+  /* The presentation state of the layer; if nothing changes during the
+   * frame presentation, this is just a pointer to the model
+   */
+  GskLayerState *presentation;
+
+  /* The frame clock used by the top-level layer */
   GdkFrameClock *frame_clock;
 
+  /* The delegate object for the children layout */
   GskLayoutManager *layout_manager;
+
+  /* The delegate object for the content of the layer */
+  GskLayerContent *layer_content;
 
   /* Bitfields: keep at the end */
   guint hidden : 1;
@@ -211,6 +223,7 @@ static gboolean
 gsk_layer_real_draw (GskLayer *self,
                      cairo_t *cr)
 {
+  GskLayerPrivate *priv = gsk_layer_get_instance_private (self);
   GskLayerState *state = gsk_layer_get_state (self);
   const RenderInfo *rinfo = gsk_layer_state_peek_render_info (state);
   const GeometryInfo *ginfo = gsk_layer_state_peek_geometry_info (state);
@@ -227,6 +240,9 @@ gsk_layer_real_draw (GskLayer *self,
   cairo_fill (cr);
 
   cairo_restore (cr);
+
+  if (priv->layer_content != NULL)
+    gsk_layer_content_draw (priv->layer_content, self, cr);
 
   GSK_LAYER_PRIV (self)->needs_redraw = FALSE;
 

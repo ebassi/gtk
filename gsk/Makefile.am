@@ -41,6 +41,7 @@ gsk_public_source_h = \
 	gskdebug.h \
 	gskenums.h \
 	gsklayer.h \
+	gsklayercontent.h \
 	gsklayeriter.h \
 	gsklayoutmanager.h \
 	gskmacros.h \
@@ -48,6 +49,7 @@ gsk_public_source_h = \
 	gsktypes.h
 
 gsk_private_source_h = \
+	gsklayercontentprivate.h \
 	gsklayerprivate.h
 
 gsk_private_source_c =
@@ -61,6 +63,7 @@ gsk_built_source_c = \
 gsk_source_c = \
 	gskdebug.c \
 	gsklayer.c \
+	gsklayercontent.c \
 	gsklayeriter.c \
 	gsklayerstate.c \
 	gsklayoutmanager.c \
